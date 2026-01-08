@@ -19,3 +19,5 @@ ZiWindow  zi_platform_create_window(const char* title, i32 width, i32 height, Zi
 void      zi_platform_destroy_window(ZiWindow window);
 void      zi_platform_poll_events();
 i8        zi_platform_should_close(ZiWindow window);
+
+void zi_platform_console_log(const char* message, i32 len, u8 error);

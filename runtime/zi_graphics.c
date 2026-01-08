@@ -1,6 +1,6 @@
 #include "zi_graphics.h"
 
-#include <stdio.h>
+#include "zi_log.h"
 
 void zi_graphics_init_vulkan(ZiRenderDevice* device);
 
@@ -14,7 +14,7 @@ void zi_graphics_init(ZiGraphicsBackend backend) {
   case ZiGraphicsBackend_Metal:
   case ZiGraphicsBackend_D3D12:
   case ZiGraphicsBackend_WebGPU:
-    printf("not supported yet\n");
+    zi_log_error("not supported yet");
     return;
   default:;
     return;

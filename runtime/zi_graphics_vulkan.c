@@ -5,13 +5,14 @@
 
 #include "volk.h"
 #include "vulkan/vk_enum_string_helper.h"
+#include "zi_log.h"
 
 static VkInstance instance = NULL;
 
 void zi_vulkan_init() {
 
   if (volkInitialize() != VK_SUCCESS) {
-    // TODO
+    zi_log_error("error on call volkInitialize");
   }
 
   VkApplicationInfo applicationInfo = {0};
@@ -29,13 +30,18 @@ void zi_vulkan_init() {
   VkResult res = vkCreateInstance(&createInfo, NULL, &instance);
 
   if (res != VK_SUCCESS) {
-    printf("Error on create vkCreateInstance %s\n", string_VkResult(res));
+    zi_log_error("Error on create vkCreateInstance %s", string_VkResult(res));
   }
 
-  printf("vulkan init\n");
+  volkLoadInstance(instance);
+
+  zi_log_debug("vulkan initialized successfully");
 }
 
-void zi_vulkan_terminate() { printf("vulkan terminate\n"); }
+void zi_vulkan_terminate() {
+  vkDestroyInstance(instance, NULL);
+  zi_log_debug("vulkan terminated successfully");
+}
 
 void zi_graphics_init_vulkan(ZiRenderDevice *device) {
   device->init = zi_vulkan_init;
