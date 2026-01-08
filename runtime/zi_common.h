@@ -22,6 +22,11 @@ typedef const char* ConstChr;
 #if _WIN64
 #define ZI_WIN 1
 #define ZI_API __declspec(dllexport)
+#elif defined(__EMSCRIPTEN__)
+#define ZI_EMSCRIPTEN 1
+#define ZI_API
+#else
+#define ZI_API
 #endif
 
 typedef f32 Float;

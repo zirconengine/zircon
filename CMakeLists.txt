@@ -34,6 +34,17 @@ elseif (APPLE)
 	SET(CMAKE_INSTALL_RPATH "${ORIGIN}/")
 endif()
 
+
+if (NOT EMSCRIPTEN)
+	set(ZI_DESKTOP ON)
+
+endif ()
+
+if (ZI_DESKTOP)
+	set(ZI_VULKAN_ENABLED ON)
+endif ()
+
+
 add_subdirectory(runner)
 add_subdirectory(runtime)
 add_subdirectory(thirdparty)

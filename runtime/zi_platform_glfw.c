@@ -1,8 +1,9 @@
 #include "zi_platform.h"
+#include "zi_log.h"
 
+#if ZI_DESKTOP
 #include <GLFW/glfw3.h>
 
-#include "zi_log.h"
 
 void zi_platform_init() { glfwInit(); }
 
@@ -34,3 +35,4 @@ void zi_platform_poll_events() {
 i8 zi_platform_should_close(ZiWindow window) {
 	return (i8)glfwWindowShouldClose(window.handler);
 }
+#endif

@@ -15,4 +15,8 @@ void zi_platform_console_log(const char* message, i32 len, u8 error) {
 	//FlushFileBuffers(h);
 }
 
+ZiGraphicsBackend zi_platform_get_graphics_backend(ZiGraphicsBackend backend) {
+	return ZiGraphicsBackend_Vulkan;
+}
+
 #endif

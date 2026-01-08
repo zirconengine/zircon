@@ -1,8 +1,10 @@
 #include "zi_graphics.h"
+#include "zi_log.h"
+
+#ifdef ZI_VULKAN_ENABLED
 
 #include "volk.h"
 #include "vulkan/vk_enum_string_helper.h"
-#include "zi_log.h"
 
 static VkInstance instance = NULL;
 
@@ -43,3 +45,8 @@ void zi_graphics_init_vulkan(ZiRenderDevice* device) {
 	device->init = zi_vulkan_init;
 	device->terminate = zi_vulkan_terminate;
 }
+#else
+void zi_graphics_init_vulkan(ZiRenderDevice* device) {
+	zi_log_error("vulkan not available on this platform");
+}
+#endif

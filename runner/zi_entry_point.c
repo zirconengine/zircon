@@ -4,7 +4,7 @@
 int main() {
 
   zi_platform_init();
-  zi_graphics_init(ZiGraphicsBackend_Vulkan);
+  zi_graphics_init(0);
 
   ZiWindow window = zi_platform_create_window("Zircon Engine", 800, 600, ZiWindowFlags_Maximized);
 
