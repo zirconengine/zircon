@@ -7,4 +7,7 @@ target_include_directories(zi-runtime PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(zi-runtime PRIVATE
 				glfw
+				vma
+				volk
+				vulkan-sdk
 )
