@@ -9,11 +9,10 @@
 
 
 void zi_platform_console_log(const char* message, i32 len, u8 error) {
+	HANDLE h = error ? GetStdHandle(STD_ERROR_HANDLE) : GetStdHandle(STD_OUTPUT_HANDLE);
+	WriteFile(h, message, len, NULL, NULL);
 
-  HANDLE h = error ? GetStdHandle(STD_ERROR_HANDLE) : GetStdHandle(STD_OUTPUT_HANDLE);
-  WriteFile(h, message, len, NULL, NULL);
-
-  //FlushFileBuffers(h);
+	//FlushFileBuffers(h);
 }
 
 #endif

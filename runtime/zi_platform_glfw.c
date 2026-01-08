@@ -2,36 +2,35 @@
 
 #include <GLFW/glfw3.h>
 
+#include "zi_log.h"
+
 void zi_platform_init() { glfwInit(); }
 
 void zi_platform_terminate() { glfwTerminate(); }
 
-ZiWindow zi_platform_create_window(const char *title, i32 width, i32 height,
-                                   ZiWindowFlags flags) {
+ZiWindow zi_platform_create_window(const char* title, i32 width, i32 height, ZiWindowFlags flags) {
+	glfwDefaultWindowHints();
 
-  glfwDefaultWindowHints();
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	glfwWindowHint(GLFW_MAXIMIZED, flags & ZiWindowFlags_Maximized ? GLFW_TRUE : GLFW_FALSE);
 
-  glfwWindowHint(GLFW_MAXIMIZED,
-                 flags & ZiWindowFlags_Maximized ? GLFW_TRUE : GLFW_FALSE);
+	GLFWwindow* window = glfwCreateWindow(width, height, title, NULL, NULL);
+	if (!window) {
+		zi_log_error("Failed to create GLFW window");
+		return (ZiWindow){0};
+	}
 
-  GLFWwindow *window = glfwCreateWindow(width, height, title, NULL, NULL);
-  if (!window) {
-    // TODO - log error
-    return (ZiWindow){0};
-  }
-
-  return (ZiWindow){.handler = window};
+	return (ZiWindow){.handler = window};
 }
 
 void zi_platform_destroy_window(ZiWindow window) {
-  glfwDestroyWindow(window.handler);
+	glfwDestroyWindow(window.handler);
 }
 
 void zi_platform_poll_events() {
-  glfwPollEvents();
+	glfwPollEvents();
 }
 
 i8 zi_platform_should_close(ZiWindow window) {
-  return (i8)glfwWindowShouldClose(window.handler);
+	return (i8)glfwWindowShouldClose(window.handler);
 }
