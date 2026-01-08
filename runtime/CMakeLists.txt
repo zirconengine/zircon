@@ -10,7 +10,18 @@ if (ZI_DESKTOP)
 	target_link_libraries(zi-runtime PRIVATE
 			glfw
 	)
-	target_compile_definitions(zi-runtime PUBLIC ZI_DESKTOP)
+	target_compile_definitions(zi-runtime PUBLIC ZI_DESKTOP=1)
+endif ()
+
+if (EMSCRIPTEN)
+	target_link_options(zi-runtime PUBLIC
+			-sASYNCIFY
+			-sWASM=1
+			-sALLOW_MEMORY_GROWTH=1
+	)
+
+	target_compile_options(zi-runtime PUBLIC "--use-port=emdawnwebgpu")
+	target_link_options(zi-runtime PUBLIC "--use-port=emdawnwebgpu")
 endif ()
 
 if (ZI_VULKAN_ENABLED)

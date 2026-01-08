@@ -1,4 +1,3 @@
-
 if (ZI_VULKAN_ENABLED)
 	add_subdirectory(vma)
 	add_subdirectory(volk)
