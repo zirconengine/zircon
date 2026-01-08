@@ -34,3 +34,5 @@ elseif (APPLE)
 endif()
 
 add_subdirectory(runner)
+add_subdirectory(runtime)
+add_subdirectory(thirdparty)
