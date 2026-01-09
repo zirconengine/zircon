@@ -29,35 +29,113 @@ enum ZiFormat_ {
 	ZiFormat_R8_Uint,
 	ZiFormat_R8_Sint,
 	// 16-bit formats
+	ZiFormat_R16_Unorm,
+	ZiFormat_R16_Snorm,
 	ZiFormat_R16_Uint,
 	ZiFormat_R16_Sint,
 	ZiFormat_R16_Float,
 	ZiFormat_RG8_Unorm,
 	ZiFormat_RG8_Snorm,
+	ZiFormat_RG8_Uint,
+	ZiFormat_RG8_Sint,
 	// 32-bit formats
 	ZiFormat_R32_Uint,
 	ZiFormat_R32_Sint,
 	ZiFormat_R32_Float,
+	ZiFormat_RG16_Unorm,
+	ZiFormat_RG16_Snorm,
 	ZiFormat_RG16_Uint,
+	ZiFormat_RG16_Sint,
 	ZiFormat_RG16_Float,
 	ZiFormat_RGBA8_Unorm,
 	ZiFormat_RGBA8_Snorm,
+	ZiFormat_RGBA8_Uint,
+	ZiFormat_RGBA8_Sint,
 	ZiFormat_RGBA8_Srgb,
 	ZiFormat_BGRA8_Unorm,
 	ZiFormat_BGRA8_Srgb,
 	// 64-bit formats
 	ZiFormat_RG32_Uint,
+	ZiFormat_RG32_Sint,
 	ZiFormat_RG32_Float,
+	ZiFormat_RGBA16_Unorm,
+	ZiFormat_RGBA16_Snorm,
 	ZiFormat_RGBA16_Uint,
+	ZiFormat_RGBA16_Sint,
 	ZiFormat_RGBA16_Float,
 	// 128-bit formats
 	ZiFormat_RGBA32_Uint,
+	ZiFormat_RGBA32_Sint,
 	ZiFormat_RGBA32_Float,
+	// Packed formats
+	ZiFormat_RGB10A2_Unorm,
+	ZiFormat_RGB10A2_Uint,
+	ZiFormat_RG11B10_Float,
+	ZiFormat_RGB9E5_Float,
+	ZiFormat_B5G6R5_Unorm,
+	ZiFormat_BGR5A1_Unorm,
+	ZiFormat_BGRA4_Unorm,
 	// Depth/stencil formats
 	ZiFormat_D16_Unorm,
 	ZiFormat_D24_Unorm_S8_Uint,
 	ZiFormat_D32_Float,
 	ZiFormat_D32_Float_S8_Uint,
+	ZiFormat_S8_Uint,
+	// BC compressed formats
+	ZiFormat_BC1_Unorm,
+	ZiFormat_BC1_Srgb,
+	ZiFormat_BC2_Unorm,
+	ZiFormat_BC2_Srgb,
+	ZiFormat_BC3_Unorm,
+	ZiFormat_BC3_Srgb,
+	ZiFormat_BC4_Unorm,
+	ZiFormat_BC4_Snorm,
+	ZiFormat_BC5_Unorm,
+	ZiFormat_BC5_Snorm,
+	ZiFormat_BC6H_UFloat,
+	ZiFormat_BC6H_SFloat,
+	ZiFormat_BC7_Unorm,
+	ZiFormat_BC7_Srgb,
+	// ETC2 compressed formats
+	ZiFormat_ETC2_RGB8_Unorm,
+	ZiFormat_ETC2_RGB8_Srgb,
+	ZiFormat_ETC2_RGB8A1_Unorm,
+	ZiFormat_ETC2_RGB8A1_Srgb,
+	ZiFormat_ETC2_RGBA8_Unorm,
+	ZiFormat_ETC2_RGBA8_Srgb,
+	ZiFormat_EAC_R11_Unorm,
+	ZiFormat_EAC_R11_Snorm,
+	ZiFormat_EAC_RG11_Unorm,
+	ZiFormat_EAC_RG11_Snorm,
+	// ASTC compressed formats
+	ZiFormat_ASTC_4x4_Unorm,
+	ZiFormat_ASTC_4x4_Srgb,
+	ZiFormat_ASTC_5x4_Unorm,
+	ZiFormat_ASTC_5x4_Srgb,
+	ZiFormat_ASTC_5x5_Unorm,
+	ZiFormat_ASTC_5x5_Srgb,
+	ZiFormat_ASTC_6x5_Unorm,
+	ZiFormat_ASTC_6x5_Srgb,
+	ZiFormat_ASTC_6x6_Unorm,
+	ZiFormat_ASTC_6x6_Srgb,
+	ZiFormat_ASTC_8x5_Unorm,
+	ZiFormat_ASTC_8x5_Srgb,
+	ZiFormat_ASTC_8x6_Unorm,
+	ZiFormat_ASTC_8x6_Srgb,
+	ZiFormat_ASTC_8x8_Unorm,
+	ZiFormat_ASTC_8x8_Srgb,
+	ZiFormat_ASTC_10x5_Unorm,
+	ZiFormat_ASTC_10x5_Srgb,
+	ZiFormat_ASTC_10x6_Unorm,
+	ZiFormat_ASTC_10x6_Srgb,
+	ZiFormat_ASTC_10x8_Unorm,
+	ZiFormat_ASTC_10x8_Srgb,
+	ZiFormat_ASTC_10x10_Unorm,
+	ZiFormat_ASTC_10x10_Srgb,
+	ZiFormat_ASTC_12x10_Unorm,
+	ZiFormat_ASTC_12x10_Srgb,
+	ZiFormat_ASTC_12x12_Unorm,
+	ZiFormat_ASTC_12x12_Srgb,
 };
 
 typedef u32 ZiFormat;
@@ -552,9 +630,9 @@ typedef struct ZiRenderDevice {
 	void                    (*cmd_end_debug_label)(ZiCommandBufferHandle cmd);
 } ZiRenderDevice;
 
-void zi_graphics_init(ZiGraphicsBackend backend);
-void zi_graphics_terminate();
-void zi_get_device_limits(ZiDeviceLimits* limits);
+void										zi_graphics_init(ZiGraphicsBackend backend);
+void										zi_graphics_terminate();
+void										zi_get_device_limits(ZiDeviceLimits* limits);
 
 // Buffer
 ZiBufferHandle          zi_buffer_create(const ZiBufferDesc* desc);
