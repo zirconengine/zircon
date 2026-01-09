@@ -48,6 +48,80 @@ static inline f32 zi_srgb_to_linear(f32 srgb) {
     return powf((srgb + 0.055f) / 1.055f, 2.4f);
 }
 
+// Smoothstep interpolation (smooth ease-in/ease-out)
+static inline f32 zi_smoothstep(f32 edge0, f32 edge1, f32 x) {
+    f32 t = zi_clamp_f32((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+// Smoother step (Ken Perlin's improved version)
+static inline f32 zi_smootherstep(f32 edge0, f32 edge1, f32 x) {
+    f32 t = zi_clamp_f32((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * t * (t * (t * 6.0f - 15.0f) + 10.0f);
+}
+
+// Inverse lerp - returns t such that lerp(a, b, t) == v
+static inline f32 zi_inverse_lerp(f32 a, f32 b, f32 v) {
+    if (zi_abs_f32(b - a) < ZI_EPSILON) {
+        return 0.0f;
+    }
+    return (v - a) / (b - a);
+}
+
+// Remap value from one range to another
+static inline f32 zi_remap(f32 v, f32 in_min, f32 in_max, f32 out_min, f32 out_max) {
+    f32 t = zi_inverse_lerp(in_min, in_max, v);
+    return zi_lerp_f32(out_min, out_max, t);
+}
+
+// Sign function
+static inline f32 zi_sign_f32(f32 v) {
+    if (v > 0.0f) return 1.0f;
+    if (v < 0.0f) return -1.0f;
+    return 0.0f;
+}
+
+// Floor and ceil
+static inline f32 zi_floor_f32(f32 v) { return floorf(v); }
+static inline f32 zi_ceil_f32(f32 v) { return ceilf(v); }
+static inline f32 zi_round_f32(f32 v) { return floorf(v + 0.5f); }
+static inline f32 zi_fract_f32(f32 v) { return v - floorf(v); }
+
+// Modulo (always positive result)
+static inline f32 zi_mod_f32(f32 a, f32 b) {
+    return a - b * floorf(a / b);
+}
+
+// ============================================================================
+// Random Number Generation (simple LCG-based)
+// ============================================================================
+
+static u32 _zi_random_seed = 12345;
+
+static inline void zi_random_seed(u32 seed) {
+    _zi_random_seed = seed;
+}
+
+static inline u32 zi_random_u32(void) {
+    _zi_random_seed = _zi_random_seed * 1103515245 + 12345;
+    return _zi_random_seed;
+}
+
+// Returns random float in [0, 1)
+static inline f32 zi_random_f32(void) {
+    return (f32)(zi_random_u32() & 0x7FFFFFFF) / (f32)0x7FFFFFFF;
+}
+
+// Returns random float in [min, max)
+static inline f32 zi_random_range_f32(f32 min_val, f32 max_val) {
+    return zi_lerp_f32(min_val, max_val, zi_random_f32());
+}
+
+// Returns random int in [min, max]
+static inline i32 zi_random_range_i32(i32 min_val, i32 max_val) {
+    return min_val + (i32)(zi_random_u32() % (u32)(max_val - min_val + 1));
+}
+
 // ============================================================================
 // Vector2 (f32)
 // ============================================================================
@@ -145,6 +219,101 @@ static inline ZiIVec2 zi_ivec2_scale(ZiIVec2 v, i32 s) {
 }
 
 // ============================================================================
+// Rectangle (f32)
+// ============================================================================
+
+typedef struct ZiRect {
+    f32 x, y, width, height;
+} ZiRect;
+
+static inline ZiRect zi_rect(f32 x, f32 y, f32 width, f32 height) {
+    return (ZiRect){ x, y, width, height };
+}
+
+static inline ZiRect zi_rect_from_min_max(ZiVec2 min, ZiVec2 max) {
+    return (ZiRect){ min.x, min.y, max.x - min.x, max.y - min.y };
+}
+
+static inline ZiRect zi_rect_from_center(ZiVec2 center, ZiVec2 size) {
+    return (ZiRect){ center.x - size.x * 0.5f, center.y - size.y * 0.5f, size.x, size.y };
+}
+
+static inline ZiVec2 zi_rect_min(ZiRect r) {
+    return zi_vec2(r.x, r.y);
+}
+
+static inline ZiVec2 zi_rect_max(ZiRect r) {
+    return zi_vec2(r.x + r.width, r.y + r.height);
+}
+
+static inline ZiVec2 zi_rect_center(ZiRect r) {
+    return zi_vec2(r.x + r.width * 0.5f, r.y + r.height * 0.5f);
+}
+
+static inline ZiVec2 zi_rect_size(ZiRect r) {
+    return zi_vec2(r.width, r.height);
+}
+
+static inline i32 zi_rect_contains_point(ZiRect r, ZiVec2 p) {
+    return p.x >= r.x && p.x <= r.x + r.width &&
+           p.y >= r.y && p.y <= r.y + r.height;
+}
+
+static inline i32 zi_rect_intersects(ZiRect a, ZiRect b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+static inline ZiRect zi_rect_intersection(ZiRect a, ZiRect b) {
+    f32 x1 = zi_max_f32(a.x, b.x);
+    f32 y1 = zi_max_f32(a.y, b.y);
+    f32 x2 = zi_min_f32(a.x + a.width, b.x + b.width);
+    f32 y2 = zi_min_f32(a.y + a.height, b.y + b.height);
+    if (x2 < x1 || y2 < y1) {
+        return zi_rect(0, 0, 0, 0);
+    }
+    return zi_rect(x1, y1, x2 - x1, y2 - y1);
+}
+
+static inline ZiRect zi_rect_union(ZiRect a, ZiRect b) {
+    f32 x1 = zi_min_f32(a.x, b.x);
+    f32 y1 = zi_min_f32(a.y, b.y);
+    f32 x2 = zi_max_f32(a.x + a.width, b.x + b.width);
+    f32 y2 = zi_max_f32(a.y + a.height, b.y + b.height);
+    return zi_rect(x1, y1, x2 - x1, y2 - y1);
+}
+
+static inline ZiRect zi_rect_expand(ZiRect r, f32 amount) {
+    return zi_rect(r.x - amount, r.y - amount, r.width + amount * 2.0f, r.height + amount * 2.0f);
+}
+
+static inline ZiRect zi_rect_translate(ZiRect r, ZiVec2 offset) {
+    return zi_rect(r.x + offset.x, r.y + offset.y, r.width, r.height);
+}
+
+// ============================================================================
+// Rectangle (i32)
+// ============================================================================
+
+typedef struct ZiIRect {
+    i32 x, y, width, height;
+} ZiIRect;
+
+static inline ZiIRect zi_irect(i32 x, i32 y, i32 width, i32 height) {
+    return (ZiIRect){ x, y, width, height };
+}
+
+static inline i32 zi_irect_contains_point(ZiIRect r, ZiIVec2 p) {
+    return p.x >= r.x && p.x < r.x + r.width &&
+           p.y >= r.y && p.y < r.y + r.height;
+}
+
+static inline i32 zi_irect_intersects(ZiIRect a, ZiIRect b) {
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+// ============================================================================
 // Vector3 (f32)
 // ============================================================================
 
@@ -239,6 +408,99 @@ static inline ZiVec3 zi_vec3_negate(ZiVec3 v) {
 static inline ZiVec3 zi_vec3_reflect(ZiVec3 v, ZiVec3 n) {
     f32 d = 2.0f * zi_vec3_dot(v, n);
     return zi_vec3_sub(v, zi_vec3_scale(n, d));
+}
+
+// Refract vector (eta = ratio of indices of refraction)
+static inline ZiVec3 zi_vec3_refract(ZiVec3 v, ZiVec3 n, f32 eta) {
+    f32 dot = zi_vec3_dot(v, n);
+    f32 k = 1.0f - eta * eta * (1.0f - dot * dot);
+    if (k < 0.0f) {
+        return zi_vec3_zero();
+    }
+    return zi_vec3_sub(
+        zi_vec3_scale(v, eta),
+        zi_vec3_scale(n, eta * dot + sqrtf(k))
+    );
+}
+
+// Project vector a onto vector b
+static inline ZiVec3 zi_vec3_project(ZiVec3 a, ZiVec3 b) {
+    f32 len_sq = zi_vec3_length_sq(b);
+    if (len_sq < ZI_EPSILON) {
+        return zi_vec3_zero();
+    }
+    return zi_vec3_scale(b, zi_vec3_dot(a, b) / len_sq);
+}
+
+// Reject vector a from vector b (component perpendicular to b)
+static inline ZiVec3 zi_vec3_reject(ZiVec3 a, ZiVec3 b) {
+    return zi_vec3_sub(a, zi_vec3_project(a, b));
+}
+
+// Angle between two vectors in radians
+static inline f32 zi_vec3_angle(ZiVec3 a, ZiVec3 b) {
+    f32 len_a = zi_vec3_length(a);
+    f32 len_b = zi_vec3_length(b);
+    if (len_a < ZI_EPSILON || len_b < ZI_EPSILON) {
+        return 0.0f;
+    }
+    f32 cos_angle = zi_vec3_dot(a, b) / (len_a * len_b);
+    cos_angle = zi_clamp_f32(cos_angle, -1.0f, 1.0f);
+    return acosf(cos_angle);
+}
+
+// Spherical linear interpolation for direction vectors
+static inline ZiVec3 zi_vec3_slerp(ZiVec3 a, ZiVec3 b, f32 t) {
+    f32 dot = zi_clamp_f32(zi_vec3_dot(a, b), -1.0f, 1.0f);
+    f32 theta = acosf(dot) * t;
+    ZiVec3 relative = zi_vec3_normalize(zi_vec3_sub(b, zi_vec3_scale(a, dot)));
+    return zi_vec3_add(
+        zi_vec3_scale(a, cosf(theta)),
+        zi_vec3_scale(relative, sinf(theta))
+    );
+}
+
+// Move towards target by max_delta
+static inline ZiVec3 zi_vec3_move_towards(ZiVec3 current, ZiVec3 target, f32 max_delta) {
+    ZiVec3 diff = zi_vec3_sub(target, current);
+    f32 dist = zi_vec3_length(diff);
+    if (dist <= max_delta || dist < ZI_EPSILON) {
+        return target;
+    }
+    return zi_vec3_add(current, zi_vec3_scale(diff, max_delta / dist));
+}
+
+// Clamp vector magnitude
+static inline ZiVec3 zi_vec3_clamp_length(ZiVec3 v, f32 max_length) {
+    f32 len_sq = zi_vec3_length_sq(v);
+    if (len_sq > max_length * max_length) {
+        return zi_vec3_scale(v, max_length / sqrtf(len_sq));
+    }
+    return v;
+}
+
+// Random point on unit sphere
+static inline ZiVec3 zi_vec3_random_on_sphere(void) {
+    f32 z = zi_random_range_f32(-1.0f, 1.0f);
+    f32 r = sqrtf(1.0f - z * z);
+    f32 theta = zi_random_f32() * ZI_TWO_PI;
+    return zi_vec3(r * cosf(theta), r * sinf(theta), z);
+}
+
+// Random point in unit sphere
+static inline ZiVec3 zi_vec3_random_in_sphere(void) {
+    ZiVec3 p = zi_vec3_random_on_sphere();
+    f32 r = powf(zi_random_f32(), 1.0f / 3.0f);
+    return zi_vec3_scale(p, r);
+}
+
+// Random direction in hemisphere around normal
+static inline ZiVec3 zi_vec3_random_hemisphere(ZiVec3 normal) {
+    ZiVec3 p = zi_vec3_random_on_sphere();
+    if (zi_vec3_dot(p, normal) < 0.0f) {
+        p = zi_vec3_negate(p);
+    }
+    return p;
 }
 
 // ============================================================================
@@ -372,6 +634,172 @@ static inline ZiIVec4 zi_ivec4_mul(ZiIVec4 a, ZiIVec4 b) {
 
 static inline ZiIVec4 zi_ivec4_scale(ZiIVec4 v, i32 s) {
     return (ZiIVec4){ v.x * s, v.y * s, v.z * s, v.w * s };
+}
+
+// ============================================================================
+// Color (RGBA f32, values in [0,1])
+// ============================================================================
+
+typedef struct ZiColor {
+    f32 r, g, b, a;
+} ZiColor;
+
+static inline ZiColor zi_color(f32 r, f32 g, f32 b, f32 a) {
+    return (ZiColor){ r, g, b, a };
+}
+
+static inline ZiColor zi_color_rgb(f32 r, f32 g, f32 b) {
+    return (ZiColor){ r, g, b, 1.0f };
+}
+
+// Create color from 0-255 values
+static inline ZiColor zi_color_from_u8(u8 r, u8 g, u8 b, u8 a) {
+    return (ZiColor){ r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f };
+}
+
+// Create color from hex (0xRRGGBBAA or 0xRRGGBB)
+static inline ZiColor zi_color_from_hex(u32 hex) {
+    if (hex <= 0xFFFFFF) {
+        // RGB format
+        return (ZiColor){
+            ((hex >> 16) & 0xFF) / 255.0f,
+            ((hex >> 8) & 0xFF) / 255.0f,
+            (hex & 0xFF) / 255.0f,
+            1.0f
+        };
+    }
+    // RGBA format
+    return (ZiColor){
+        ((hex >> 24) & 0xFF) / 255.0f,
+        ((hex >> 16) & 0xFF) / 255.0f,
+        ((hex >> 8) & 0xFF) / 255.0f,
+        (hex & 0xFF) / 255.0f
+    };
+}
+
+// Convert to hex
+static inline u32 zi_color_to_hex(ZiColor c) {
+    u8 r = (u8)(zi_clamp_f32(c.r, 0.0f, 1.0f) * 255.0f);
+    u8 g = (u8)(zi_clamp_f32(c.g, 0.0f, 1.0f) * 255.0f);
+    u8 b = (u8)(zi_clamp_f32(c.b, 0.0f, 1.0f) * 255.0f);
+    u8 a = (u8)(zi_clamp_f32(c.a, 0.0f, 1.0f) * 255.0f);
+    return ((u32)r << 24) | ((u32)g << 16) | ((u32)b << 8) | a;
+}
+
+// Common colors
+static inline ZiColor zi_color_white(void) { return (ZiColor){ 1.0f, 1.0f, 1.0f, 1.0f }; }
+static inline ZiColor zi_color_black(void) { return (ZiColor){ 0.0f, 0.0f, 0.0f, 1.0f }; }
+static inline ZiColor zi_color_red(void) { return (ZiColor){ 1.0f, 0.0f, 0.0f, 1.0f }; }
+static inline ZiColor zi_color_green(void) { return (ZiColor){ 0.0f, 1.0f, 0.0f, 1.0f }; }
+static inline ZiColor zi_color_blue(void) { return (ZiColor){ 0.0f, 0.0f, 1.0f, 1.0f }; }
+static inline ZiColor zi_color_yellow(void) { return (ZiColor){ 1.0f, 1.0f, 0.0f, 1.0f }; }
+static inline ZiColor zi_color_cyan(void) { return (ZiColor){ 0.0f, 1.0f, 1.0f, 1.0f }; }
+static inline ZiColor zi_color_magenta(void) { return (ZiColor){ 1.0f, 0.0f, 1.0f, 1.0f }; }
+static inline ZiColor zi_color_transparent(void) { return (ZiColor){ 0.0f, 0.0f, 0.0f, 0.0f }; }
+
+static inline ZiColor zi_color_add(ZiColor a, ZiColor b) {
+    return (ZiColor){ a.r + b.r, a.g + b.g, a.b + b.b, a.a + b.a };
+}
+
+static inline ZiColor zi_color_mul(ZiColor a, ZiColor b) {
+    return (ZiColor){ a.r * b.r, a.g * b.g, a.b * b.b, a.a * b.a };
+}
+
+static inline ZiColor zi_color_scale(ZiColor c, f32 s) {
+    return (ZiColor){ c.r * s, c.g * s, c.b * s, c.a * s };
+}
+
+static inline ZiColor zi_color_lerp(ZiColor a, ZiColor b, f32 t) {
+    return (ZiColor){
+        zi_lerp_f32(a.r, b.r, t),
+        zi_lerp_f32(a.g, b.g, t),
+        zi_lerp_f32(a.b, b.b, t),
+        zi_lerp_f32(a.a, b.a, t)
+    };
+}
+
+static inline ZiColor zi_color_clamp(ZiColor c) {
+    return (ZiColor){
+        zi_clamp_f32(c.r, 0.0f, 1.0f),
+        zi_clamp_f32(c.g, 0.0f, 1.0f),
+        zi_clamp_f32(c.b, 0.0f, 1.0f),
+        zi_clamp_f32(c.a, 0.0f, 1.0f)
+    };
+}
+
+// Premultiply alpha
+static inline ZiColor zi_color_premultiply_alpha(ZiColor c) {
+    return (ZiColor){ c.r * c.a, c.g * c.a, c.b * c.a, c.a };
+}
+
+// Blend colors (src over dst, assumes premultiplied alpha)
+static inline ZiColor zi_color_blend_premultiplied(ZiColor src, ZiColor dst) {
+    f32 one_minus_src_a = 1.0f - src.a;
+    return (ZiColor){
+        src.r + dst.r * one_minus_src_a,
+        src.g + dst.g * one_minus_src_a,
+        src.b + dst.b * one_minus_src_a,
+        src.a + dst.a * one_minus_src_a
+    };
+}
+
+// Blend colors (src over dst, straight alpha)
+static inline ZiColor zi_color_blend(ZiColor src, ZiColor dst) {
+    f32 out_a = src.a + dst.a * (1.0f - src.a);
+    if (out_a < ZI_EPSILON) {
+        return zi_color_transparent();
+    }
+    return (ZiColor){
+        (src.r * src.a + dst.r * dst.a * (1.0f - src.a)) / out_a,
+        (src.g * src.a + dst.g * dst.a * (1.0f - src.a)) / out_a,
+        (src.b * src.a + dst.b * dst.a * (1.0f - src.a)) / out_a,
+        out_a
+    };
+}
+
+// Convert to linear color space
+static inline ZiColor zi_color_to_linear(ZiColor c) {
+    return (ZiColor){
+        zi_srgb_to_linear(c.r),
+        zi_srgb_to_linear(c.g),
+        zi_srgb_to_linear(c.b),
+        c.a
+    };
+}
+
+// Convert to sRGB color space
+static inline ZiColor zi_color_to_srgb(ZiColor c) {
+    return (ZiColor){
+        zi_linear_to_srgb(c.r),
+        zi_linear_to_srgb(c.g),
+        zi_linear_to_srgb(c.b),
+        c.a
+    };
+}
+
+// Create color from HSV (h: 0-360, s: 0-1, v: 0-1)
+static inline ZiColor zi_color_from_hsv(f32 h, f32 s, f32 v, f32 a) {
+    h = zi_mod_f32(h, 360.0f);
+    f32 c = v * s;
+    f32 x = c * (1.0f - zi_abs_f32(zi_mod_f32(h / 60.0f, 2.0f) - 1.0f));
+    f32 m = v - c;
+    f32 r, g, b;
+    if (h < 60.0f) { r = c; g = x; b = 0; }
+    else if (h < 120.0f) { r = x; g = c; b = 0; }
+    else if (h < 180.0f) { r = 0; g = c; b = x; }
+    else if (h < 240.0f) { r = 0; g = x; b = c; }
+    else if (h < 300.0f) { r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    return (ZiColor){ r + m, g + m, b + m, a };
+}
+
+// Convert to ZiVec4
+static inline ZiVec4 zi_color_to_vec4(ZiColor c) {
+    return (ZiVec4){ c.r, c.g, c.b, c.a };
+}
+
+static inline ZiColor zi_color_from_vec4(ZiVec4 v) {
+    return (ZiColor){ v.x, v.y, v.z, v.w };
 }
 
 // ============================================================================
@@ -924,6 +1352,101 @@ static inline ZiQuat zi_quat_from_mat4(const ZiMat4* m) {
     return zi_quat_normalize(q);
 }
 
+// Create quaternion that rotates from one direction to another
+static inline ZiQuat zi_quat_from_to(ZiVec3 from, ZiVec3 to) {
+    ZiVec3 f = zi_vec3_normalize(from);
+    ZiVec3 t = zi_vec3_normalize(to);
+    f32 dot = zi_vec3_dot(f, t);
+
+    if (dot > 0.9999f) {
+        return zi_quat_identity();
+    }
+    if (dot < -0.9999f) {
+        // Vectors are opposite, find perpendicular axis
+        ZiVec3 axis = zi_vec3_cross(zi_vec3(1, 0, 0), f);
+        if (zi_vec3_length_sq(axis) < ZI_EPSILON) {
+            axis = zi_vec3_cross(zi_vec3(0, 1, 0), f);
+        }
+        axis = zi_vec3_normalize(axis);
+        return zi_quat_from_axis_angle(axis, ZI_PI);
+    }
+
+    ZiVec3 axis = zi_vec3_cross(f, t);
+    f32 s = sqrtf((1.0f + dot) * 2.0f);
+    f32 inv_s = 1.0f / s;
+    return zi_quat_normalize((ZiQuat){
+        axis.x * inv_s,
+        axis.y * inv_s,
+        axis.z * inv_s,
+        s * 0.5f
+    });
+}
+
+// Create quaternion looking in direction (forward = +Z, up = +Y)
+static inline ZiQuat zi_quat_look_rotation(ZiVec3 forward, ZiVec3 up) {
+    ZiVec3 f = zi_vec3_normalize(forward);
+    ZiVec3 r = zi_vec3_normalize(zi_vec3_cross(up, f));
+    ZiVec3 u = zi_vec3_cross(f, r);
+
+    // Build rotation matrix and convert to quaternion
+    f32 m00 = r.x, m01 = u.x, m02 = f.x;
+    f32 m10 = r.y, m11 = u.y, m12 = f.y;
+    f32 m20 = r.z, m21 = u.z, m22 = f.z;
+
+    f32 trace = m00 + m11 + m22;
+    ZiQuat q;
+
+    if (trace > 0.0f) {
+        f32 s = 0.5f / sqrtf(trace + 1.0f);
+        q.w = 0.25f / s;
+        q.x = (m21 - m12) * s;
+        q.y = (m02 - m20) * s;
+        q.z = (m10 - m01) * s;
+    } else if (m00 > m11 && m00 > m22) {
+        f32 s = 2.0f * sqrtf(1.0f + m00 - m11 - m22);
+        q.w = (m21 - m12) / s;
+        q.x = 0.25f * s;
+        q.y = (m01 + m10) / s;
+        q.z = (m02 + m20) / s;
+    } else if (m11 > m22) {
+        f32 s = 2.0f * sqrtf(1.0f + m11 - m00 - m22);
+        q.w = (m02 - m20) / s;
+        q.x = (m01 + m10) / s;
+        q.y = 0.25f * s;
+        q.z = (m12 + m21) / s;
+    } else {
+        f32 s = 2.0f * sqrtf(1.0f + m22 - m00 - m11);
+        q.w = (m10 - m01) / s;
+        q.x = (m02 + m20) / s;
+        q.y = (m12 + m21) / s;
+        q.z = 0.25f * s;
+    }
+    return zi_quat_normalize(q);
+}
+
+// Rotate towards target quaternion by max_delta radians
+static inline ZiQuat zi_quat_rotate_towards(ZiQuat from, ZiQuat to, f32 max_delta) {
+    f32 angle = acosf(zi_clamp_f32(zi_abs_f32(zi_quat_dot(from, to)), 0.0f, 1.0f)) * 2.0f;
+    if (angle < ZI_EPSILON) {
+        return to;
+    }
+    f32 t = zi_min_f32(1.0f, max_delta / angle);
+    return zi_quat_slerp(from, to, t);
+}
+
+// Get forward/right/up vectors from quaternion
+static inline ZiVec3 zi_quat_forward(ZiQuat q) {
+    return zi_quat_rotate_vec3(q, zi_vec3(0, 0, 1));
+}
+
+static inline ZiVec3 zi_quat_right(ZiQuat q) {
+    return zi_quat_rotate_vec3(q, zi_vec3(1, 0, 0));
+}
+
+static inline ZiVec3 zi_quat_up(ZiQuat q) {
+    return zi_quat_rotate_vec3(q, zi_vec3(0, 1, 0));
+}
+
 // ============================================================================
 // Geometric Primitives
 // ============================================================================
@@ -1010,6 +1533,76 @@ static inline ZiVec3 zi_triangle_normal(ZiTriangle t) {
     ZiVec3 e1 = zi_vec3_sub(t.v1, t.v0);
     ZiVec3 e2 = zi_vec3_sub(t.v2, t.v0);
     return zi_vec3_normalize(zi_vec3_cross(e1, e2));
+}
+
+// Oriented Bounding Box
+typedef struct ZiOBB {
+    ZiVec3 center;
+    ZiVec3 extents;     // Half-size along each local axis
+    ZiVec3 axes[3];     // Local X, Y, Z axes (normalized)
+} ZiOBB;
+
+static inline ZiOBB zi_obb(ZiVec3 center, ZiVec3 extents, ZiQuat orientation) {
+    ZiOBB obb;
+    obb.center = center;
+    obb.extents = extents;
+    obb.axes[0] = zi_quat_rotate_vec3(orientation, zi_vec3(1, 0, 0));
+    obb.axes[1] = zi_quat_rotate_vec3(orientation, zi_vec3(0, 1, 0));
+    obb.axes[2] = zi_quat_rotate_vec3(orientation, zi_vec3(0, 0, 1));
+    return obb;
+}
+
+static inline ZiOBB zi_obb_from_aabb(ZiAABB aabb) {
+    ZiOBB obb;
+    obb.center = zi_aabb_center(aabb);
+    obb.extents = zi_aabb_extents(aabb);
+    obb.axes[0] = zi_vec3(1, 0, 0);
+    obb.axes[1] = zi_vec3(0, 1, 0);
+    obb.axes[2] = zi_vec3(0, 0, 1);
+    return obb;
+}
+
+// Get the 8 corners of an OBB
+static inline void zi_obb_corners(ZiOBB obb, ZiVec3* out_corners) {
+    ZiVec3 scaled[3];
+    scaled[0] = zi_vec3_scale(obb.axes[0], obb.extents.x);
+    scaled[1] = zi_vec3_scale(obb.axes[1], obb.extents.y);
+    scaled[2] = zi_vec3_scale(obb.axes[2], obb.extents.z);
+
+    out_corners[0] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(zi_vec3_negate(scaled[0]), zi_vec3_negate(scaled[1])), zi_vec3_negate(scaled[2])));
+    out_corners[1] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(scaled[0], zi_vec3_negate(scaled[1])), zi_vec3_negate(scaled[2])));
+    out_corners[2] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(zi_vec3_negate(scaled[0]), scaled[1]), zi_vec3_negate(scaled[2])));
+    out_corners[3] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(scaled[0], scaled[1]), zi_vec3_negate(scaled[2])));
+    out_corners[4] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(zi_vec3_negate(scaled[0]), zi_vec3_negate(scaled[1])), scaled[2]));
+    out_corners[5] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(scaled[0], zi_vec3_negate(scaled[1])), scaled[2]));
+    out_corners[6] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(zi_vec3_negate(scaled[0]), scaled[1]), scaled[2]));
+    out_corners[7] = zi_vec3_add(obb.center, zi_vec3_add(zi_vec3_add(scaled[0], scaled[1]), scaled[2]));
+}
+
+// Check if point is inside OBB
+static inline i32 zi_obb_contains_point(ZiOBB obb, ZiVec3 point) {
+    ZiVec3 d = zi_vec3_sub(point, obb.center);
+    for (i32 i = 0; i < 3; i++) {
+        f32 dist = zi_abs_f32(zi_vec3_dot(d, obb.axes[i]));
+        f32 extent = (&obb.extents.x)[i];
+        if (dist > extent) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// Closest point on OBB to a point
+static inline ZiVec3 zi_obb_closest_point(ZiOBB obb, ZiVec3 point) {
+    ZiVec3 d = zi_vec3_sub(point, obb.center);
+    ZiVec3 result = obb.center;
+    for (i32 i = 0; i < 3; i++) {
+        f32 dist = zi_vec3_dot(d, obb.axes[i]);
+        f32 extent = (&obb.extents.x)[i];
+        dist = zi_clamp_f32(dist, -extent, extent);
+        result = zi_vec3_add(result, zi_vec3_scale(obb.axes[i], dist));
+    }
+    return result;
 }
 
 typedef struct ZiFrustum {
@@ -1223,6 +1816,81 @@ static inline i32 zi_frustum_contains_aabb(ZiFrustum f, ZiAABB b) {
     return 1;
 }
 
+// OBB-OBB intersection (Separating Axis Theorem)
+static inline i32 zi_obb_obb_intersect(ZiOBB a, ZiOBB b) {
+    ZiVec3 d = zi_vec3_sub(b.center, a.center);
+
+    // Test 15 separating axes
+    for (i32 i = 0; i < 3; i++) {
+        // A's axes
+        f32 ra = (&a.extents.x)[i];
+        f32 rb = zi_abs_f32(zi_vec3_dot(b.axes[0], a.axes[i])) * b.extents.x +
+                 zi_abs_f32(zi_vec3_dot(b.axes[1], a.axes[i])) * b.extents.y +
+                 zi_abs_f32(zi_vec3_dot(b.axes[2], a.axes[i])) * b.extents.z;
+        if (zi_abs_f32(zi_vec3_dot(d, a.axes[i])) > ra + rb) return 0;
+    }
+
+    for (i32 i = 0; i < 3; i++) {
+        // B's axes
+        f32 ra = zi_abs_f32(zi_vec3_dot(a.axes[0], b.axes[i])) * a.extents.x +
+                 zi_abs_f32(zi_vec3_dot(a.axes[1], b.axes[i])) * a.extents.y +
+                 zi_abs_f32(zi_vec3_dot(a.axes[2], b.axes[i])) * a.extents.z;
+        f32 rb = (&b.extents.x)[i];
+        if (zi_abs_f32(zi_vec3_dot(d, b.axes[i])) > ra + rb) return 0;
+    }
+
+    // Cross product axes (9 axes: A0xB0, A0xB1, A0xB2, A1xB0, ...)
+    for (i32 i = 0; i < 3; i++) {
+        for (i32 j = 0; j < 3; j++) {
+            ZiVec3 axis = zi_vec3_cross(a.axes[i], b.axes[j]);
+            f32 len_sq = zi_vec3_length_sq(axis);
+            if (len_sq < ZI_EPSILON) continue; // Parallel axes
+
+            axis = zi_vec3_scale(axis, 1.0f / sqrtf(len_sq));
+            f32 ra = 0.0f, rb = 0.0f;
+            for (i32 k = 0; k < 3; k++) {
+                ra += zi_abs_f32(zi_vec3_dot(a.axes[k], axis)) * (&a.extents.x)[k];
+                rb += zi_abs_f32(zi_vec3_dot(b.axes[k], axis)) * (&b.extents.x)[k];
+            }
+            if (zi_abs_f32(zi_vec3_dot(d, axis)) > ra + rb) return 0;
+        }
+    }
+    return 1;
+}
+
+// OBB-Sphere intersection
+static inline i32 zi_obb_sphere_intersect(ZiOBB obb, ZiSphere s) {
+    ZiVec3 closest = zi_obb_closest_point(obb, s.center);
+    f32 dist_sq = zi_vec3_length_sq(zi_vec3_sub(closest, s.center));
+    return dist_sq <= s.radius * s.radius;
+}
+
+// Ray-OBB intersection
+static inline i32 zi_ray_obb_intersect(ZiRay ray, ZiOBB obb, f32* t_out) {
+    ZiVec3 p = zi_vec3_sub(obb.center, ray.origin);
+    f32 t_min = 0.0f;
+    f32 t_max = F32_MAX;
+
+    for (i32 i = 0; i < 3; i++) {
+        f32 e = zi_vec3_dot(obb.axes[i], p);
+        f32 f = zi_vec3_dot(obb.axes[i], ray.direction);
+        f32 extent = (&obb.extents.x)[i];
+
+        if (zi_abs_f32(f) > ZI_EPSILON) {
+            f32 t1 = (e + extent) / f;
+            f32 t2 = (e - extent) / f;
+            if (t1 > t2) { f32 tmp = t1; t1 = t2; t2 = tmp; }
+            t_min = zi_max_f32(t_min, t1);
+            t_max = zi_min_f32(t_max, t2);
+            if (t_min > t_max) return 0;
+        } else if (-e - extent > 0.0f || -e + extent < 0.0f) {
+            return 0;
+        }
+    }
+    if (t_out) *t_out = t_min;
+    return 1;
+}
+
 // ============================================================================
 // Transform Decomposition
 // ============================================================================
@@ -1281,4 +1949,190 @@ static inline ZiMat4 zi_mat4_compose(ZiVec3 translation, ZiQuat rotation, ZiVec3
     ZiMat4 s = zi_mat4_scale(scale);
     ZiMat4 rs = zi_mat4_mul(&r, &s);
     return zi_mat4_mul(&t, &rs);
+}
+
+// ============================================================================
+// Spline Interpolation
+// ============================================================================
+
+// Quadratic Bezier curve (3 control points)
+static inline ZiVec3 zi_bezier_quadratic(ZiVec3 p0, ZiVec3 p1, ZiVec3 p2, f32 t) {
+    f32 u = 1.0f - t;
+    return zi_vec3_add(
+        zi_vec3_add(
+            zi_vec3_scale(p0, u * u),
+            zi_vec3_scale(p1, 2.0f * u * t)
+        ),
+        zi_vec3_scale(p2, t * t)
+    );
+}
+
+// Cubic Bezier curve (4 control points)
+static inline ZiVec3 zi_bezier_cubic(ZiVec3 p0, ZiVec3 p1, ZiVec3 p2, ZiVec3 p3, f32 t) {
+    f32 u = 1.0f - t;
+    f32 tt = t * t;
+    f32 uu = u * u;
+    f32 uuu = uu * u;
+    f32 ttt = tt * t;
+    return zi_vec3_add(
+        zi_vec3_add(
+            zi_vec3_scale(p0, uuu),
+            zi_vec3_scale(p1, 3.0f * uu * t)
+        ),
+        zi_vec3_add(
+            zi_vec3_scale(p2, 3.0f * u * tt),
+            zi_vec3_scale(p3, ttt)
+        )
+    );
+}
+
+// Cubic Bezier tangent (derivative)
+static inline ZiVec3 zi_bezier_cubic_tangent(ZiVec3 p0, ZiVec3 p1, ZiVec3 p2, ZiVec3 p3, f32 t) {
+    f32 u = 1.0f - t;
+    return zi_vec3_add(
+        zi_vec3_add(
+            zi_vec3_scale(zi_vec3_sub(p1, p0), 3.0f * u * u),
+            zi_vec3_scale(zi_vec3_sub(p2, p1), 6.0f * u * t)
+        ),
+        zi_vec3_scale(zi_vec3_sub(p3, p2), 3.0f * t * t)
+    );
+}
+
+// Catmull-Rom spline (passes through all control points)
+// t is in [0,1] between p1 and p2
+static inline ZiVec3 zi_catmull_rom(ZiVec3 p0, ZiVec3 p1, ZiVec3 p2, ZiVec3 p3, f32 t) {
+    f32 tt = t * t;
+    f32 ttt = tt * t;
+
+    // Catmull-Rom basis functions
+    f32 q0 = -ttt + 2.0f * tt - t;
+    f32 q1 = 3.0f * ttt - 5.0f * tt + 2.0f;
+    f32 q2 = -3.0f * ttt + 4.0f * tt + t;
+    f32 q3 = ttt - tt;
+
+    return zi_vec3_scale(
+        zi_vec3_add(
+            zi_vec3_add(zi_vec3_scale(p0, q0), zi_vec3_scale(p1, q1)),
+            zi_vec3_add(zi_vec3_scale(p2, q2), zi_vec3_scale(p3, q3))
+        ),
+        0.5f
+    );
+}
+
+// Catmull-Rom tangent
+static inline ZiVec3 zi_catmull_rom_tangent(ZiVec3 p0, ZiVec3 p1, ZiVec3 p2, ZiVec3 p3, f32 t) {
+    f32 tt = t * t;
+
+    f32 q0 = -3.0f * tt + 4.0f * t - 1.0f;
+    f32 q1 = 9.0f * tt - 10.0f * t;
+    f32 q2 = -9.0f * tt + 8.0f * t + 1.0f;
+    f32 q3 = 3.0f * tt - 2.0f * t;
+
+    return zi_vec3_scale(
+        zi_vec3_add(
+            zi_vec3_add(zi_vec3_scale(p0, q0), zi_vec3_scale(p1, q1)),
+            zi_vec3_add(zi_vec3_scale(p2, q2), zi_vec3_scale(p3, q3))
+        ),
+        0.5f
+    );
+}
+
+// Hermite spline interpolation
+// p0, p1: endpoints; m0, m1: tangents at endpoints
+static inline ZiVec3 zi_hermite(ZiVec3 p0, ZiVec3 m0, ZiVec3 p1, ZiVec3 m1, f32 t) {
+    f32 tt = t * t;
+    f32 ttt = tt * t;
+
+    f32 h00 = 2.0f * ttt - 3.0f * tt + 1.0f;
+    f32 h10 = ttt - 2.0f * tt + t;
+    f32 h01 = -2.0f * ttt + 3.0f * tt;
+    f32 h11 = ttt - tt;
+
+    return zi_vec3_add(
+        zi_vec3_add(zi_vec3_scale(p0, h00), zi_vec3_scale(m0, h10)),
+        zi_vec3_add(zi_vec3_scale(p1, h01), zi_vec3_scale(m1, h11))
+    );
+}
+
+// 1D versions for scalar interpolation
+static inline f32 zi_bezier_cubic_f32(f32 p0, f32 p1, f32 p2, f32 p3, f32 t) {
+    f32 u = 1.0f - t;
+    f32 tt = t * t;
+    f32 uu = u * u;
+    return uu * u * p0 + 3.0f * uu * t * p1 + 3.0f * u * tt * p2 + tt * t * p3;
+}
+
+static inline f32 zi_catmull_rom_f32(f32 p0, f32 p1, f32 p2, f32 p3, f32 t) {
+    f32 tt = t * t;
+    f32 ttt = tt * t;
+    return 0.5f * (
+        (-ttt + 2.0f * tt - t) * p0 +
+        (3.0f * ttt - 5.0f * tt + 2.0f) * p1 +
+        (-3.0f * ttt + 4.0f * tt + t) * p2 +
+        (ttt - tt) * p3
+    );
+}
+
+// ============================================================================
+// Billboard Matrices
+// ============================================================================
+
+// Spherical billboard - faces camera completely (for sprites, particles)
+static inline ZiMat4 zi_mat4_billboard_spherical(ZiVec3 object_pos, ZiVec3 camera_pos, ZiVec3 camera_up) {
+    ZiVec3 look = zi_vec3_normalize(zi_vec3_sub(camera_pos, object_pos));
+    ZiVec3 right = zi_vec3_normalize(zi_vec3_cross(camera_up, look));
+    ZiVec3 up = zi_vec3_cross(look, right);
+
+    ZiMat4 m = zi_mat4_identity();
+    zi_mat4_set(&m, 0, 0, right.x);
+    zi_mat4_set(&m, 1, 0, right.y);
+    zi_mat4_set(&m, 2, 0, right.z);
+    zi_mat4_set(&m, 0, 1, up.x);
+    zi_mat4_set(&m, 1, 1, up.y);
+    zi_mat4_set(&m, 2, 1, up.z);
+    zi_mat4_set(&m, 0, 2, look.x);
+    zi_mat4_set(&m, 1, 2, look.y);
+    zi_mat4_set(&m, 2, 2, look.z);
+    zi_mat4_set(&m, 0, 3, object_pos.x);
+    zi_mat4_set(&m, 1, 3, object_pos.y);
+    zi_mat4_set(&m, 2, 3, object_pos.z);
+    return m;
+}
+
+// Cylindrical billboard - rotates only around up axis (for trees, pillars)
+static inline ZiMat4 zi_mat4_billboard_cylindrical(ZiVec3 object_pos, ZiVec3 camera_pos, ZiVec3 up_axis) {
+    ZiVec3 look = zi_vec3_sub(camera_pos, object_pos);
+    look = zi_vec3_normalize(zi_vec3_reject(look, up_axis)); // Project onto horizontal plane
+    ZiVec3 right = zi_vec3_normalize(zi_vec3_cross(up_axis, look));
+
+    ZiMat4 m = zi_mat4_identity();
+    zi_mat4_set(&m, 0, 0, right.x);
+    zi_mat4_set(&m, 1, 0, right.y);
+    zi_mat4_set(&m, 2, 0, right.z);
+    zi_mat4_set(&m, 0, 1, up_axis.x);
+    zi_mat4_set(&m, 1, 1, up_axis.y);
+    zi_mat4_set(&m, 2, 1, up_axis.z);
+    zi_mat4_set(&m, 0, 2, look.x);
+    zi_mat4_set(&m, 1, 2, look.y);
+    zi_mat4_set(&m, 2, 2, look.z);
+    zi_mat4_set(&m, 0, 3, object_pos.x);
+    zi_mat4_set(&m, 1, 3, object_pos.y);
+    zi_mat4_set(&m, 2, 3, object_pos.z);
+    return m;
+}
+
+// Extract billboard rotation from view matrix (for GPU instancing)
+static inline ZiMat4 zi_mat4_billboard_from_view(const ZiMat4* view) {
+    ZiMat4 m = zi_mat4_identity();
+    // Billboard is the transpose of the upper-left 3x3 of the view matrix
+    zi_mat4_set(&m, 0, 0, zi_mat4_at(view, 0, 0));
+    zi_mat4_set(&m, 0, 1, zi_mat4_at(view, 1, 0));
+    zi_mat4_set(&m, 0, 2, zi_mat4_at(view, 2, 0));
+    zi_mat4_set(&m, 1, 0, zi_mat4_at(view, 0, 1));
+    zi_mat4_set(&m, 1, 1, zi_mat4_at(view, 1, 1));
+    zi_mat4_set(&m, 1, 2, zi_mat4_at(view, 2, 1));
+    zi_mat4_set(&m, 2, 0, zi_mat4_at(view, 0, 2));
+    zi_mat4_set(&m, 2, 1, zi_mat4_at(view, 1, 2));
+    zi_mat4_set(&m, 2, 2, zi_mat4_at(view, 2, 2));
+    return m;
 }
