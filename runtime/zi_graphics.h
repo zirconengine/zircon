@@ -9,6 +9,8 @@ ZI_HANDLER(ZiSamplerHandle);
 ZI_HANDLER(ZiRenderPassHandle);
 ZI_HANDLER(ZiCommandBufferHandle);
 ZI_HANDLER(ZiSwapchainHandle);
+ZI_HANDLER(ZiPipelineLayoutHandle);
+ZI_HANDLER(ZiBindGroupLayoutHandle);
 
 enum ZiGraphicsBackend_ {
 	ZiGraphicsBackend_Vulkan = 1,
@@ -60,6 +62,13 @@ enum ZiFormat_ {
 
 typedef u32 ZiFormat;
 
+enum ZiIndexFormat_ {
+	ZiIndexFormat_Uint16 = 0,
+	ZiIndexFormat_Uint32,
+};
+
+typedef u32 ZiIndexFormat;
+
 enum ZiBufferUsage_ {
 	ZiBufferUsage_None    = 0,
 	ZiBufferUsage_Vertex  = 1 << 0,
@@ -72,9 +81,18 @@ enum ZiBufferUsage_ {
 
 typedef u32 ZiBufferUsage;
 
+enum ZiMemoryUsage_ {
+	ZiMemoryUsage_GpuOnly  = 0,
+	ZiMemoryUsage_CpuToGpu = 1,
+	ZiMemoryUsage_GpuToCpu = 2,
+};
+
+typedef u32 ZiMemoryUsage;
+
 typedef struct ZiBufferDesc {
 	u64           size;
 	ZiBufferUsage usage;
+	ZiMemoryUsage memory;
 } ZiBufferDesc;
 
 enum ZiTextureDimension_ {
@@ -105,6 +123,7 @@ typedef struct ZiTextureDesc {
 	u32                depth;
 	u32                mip_levels;
 	u32                array_layers;
+	u32                sample_count;
 	ZiTextureUsage     usage;
 } ZiTextureDesc;
 
@@ -155,6 +174,19 @@ enum ZiAddressMode_ {
 
 typedef u32 ZiAddressMode;
 
+enum ZiCompareFunc_ {
+	ZiCompareFunc_Never = 0,
+	ZiCompareFunc_Less,
+	ZiCompareFunc_Equal,
+	ZiCompareFunc_LessEqual,
+	ZiCompareFunc_Greater,
+	ZiCompareFunc_NotEqual,
+	ZiCompareFunc_GreaterEqual,
+	ZiCompareFunc_Always,
+};
+
+typedef u32 ZiCompareFunc;
+
 typedef struct ZiSamplerDesc {
 	ZiFilterMode  min_filter;
 	ZiFilterMode  mag_filter;
@@ -164,6 +196,8 @@ typedef struct ZiSamplerDesc {
 	ZiAddressMode address_w;
 	f32           min_lod;
 	f32           max_lod;
+	f32           max_anisotropy;
+	ZiCompareFunc compare;
 } ZiSamplerDesc;
 
 
@@ -208,19 +242,6 @@ enum ZiFrontFace_ {
 };
 
 typedef u32 ZiFrontFace;
-
-enum ZiCompareFunc_ {
-	ZiCompareFunc_Never = 0,
-	ZiCompareFunc_Less,
-	ZiCompareFunc_Equal,
-	ZiCompareFunc_LessEqual,
-	ZiCompareFunc_Greater,
-	ZiCompareFunc_NotEqual,
-	ZiCompareFunc_GreaterEqual,
-	ZiCompareFunc_Always,
-};
-
-typedef u32 ZiCompareFunc;
 
 enum ZiBlendFactor_ {
 	ZiBlendFactor_Zero = 0,
@@ -289,20 +310,31 @@ typedef struct ZiRasterizerState {
 	u8          wireframe;
 } ZiRasterizerState;
 
-typedef struct ZiPipelineDesc {
-	ZiShaderHandle      vertex_shader;
-	ZiShaderHandle      fragment_shader;
-	ZiVertexBinding*    vertex_bindings;
-	u32                 vertex_binding_count;
-	ZiVertexAttribute*  vertex_attributes;
-	u32                 vertex_attribute_count;
-	ZiPrimitiveTopology topology;
-	ZiRasterizerState   rasterizer;
-	ZiDepthStencilState depth_stencil;
-	ZiBlendState        blend;
-	ZiFormat            color_format;
-	ZiFormat            depth_format;
-} ZiPipelineDesc;
+typedef struct ZiPipelineLayoutDesc {
+	ZiBindGroupLayoutHandle* bind_group_layouts;
+	u32                      bind_group_layout_count;
+} ZiPipelineLayoutDesc;
+
+typedef struct ZiGraphicsPipelineDesc {
+	ZiShaderHandle         vertex_shader;
+	ZiShaderHandle         fragment_shader;
+	ZiPipelineLayoutHandle layout;
+	ZiVertexBinding*       vertex_bindings;
+	u32                    vertex_binding_count;
+	ZiVertexAttribute*     vertex_attributes;
+	u32                    vertex_attribute_count;
+	ZiPrimitiveTopology    topology;
+	ZiRasterizerState      rasterizer;
+	ZiDepthStencilState    depth_stencil;
+	ZiBlendState           blend;
+	ZiFormat               color_format;
+	ZiFormat               depth_format;
+} ZiGraphicsPipelineDesc;
+
+typedef struct ZiComputePipelineDesc {
+	ZiShaderHandle         compute_shader;
+	ZiPipelineLayoutHandle layout;
+} ZiComputePipelineDesc;
 
 ZI_HANDLER(ZiPipelineHandle);
 
@@ -363,8 +395,6 @@ typedef struct ZiBindGroupLayoutDesc {
 	u32                     entry_count;
 } ZiBindGroupLayoutDesc;
 
-ZI_HANDLER(ZiBindGroupLayoutHandle);
-
 typedef struct ZiBindGroupEntry {
 	u32             binding;
 	ZiBufferHandle  buffer;
@@ -398,14 +428,37 @@ typedef struct ZiSwapchainDesc {
 	ZiPresentMode present_mode;
 } ZiSwapchainDesc;
 
+typedef struct ZiDeviceLimits {
+	u32 max_texture_dimension_1d;
+	u32 max_texture_dimension_2d;
+	u32 max_texture_dimension_3d;
+	u32 max_texture_array_layers;
+	u32 max_bind_groups;
+	u32 max_bindings_per_bind_group;
+	u32 max_uniform_buffer_size;
+	u32 max_storage_buffer_size;
+	u32 max_vertex_buffers;
+	u32 max_vertex_attributes;
+	u32 max_vertex_buffer_stride;
+	u32 max_color_attachments;
+	u32 max_compute_workgroup_size_x;
+	u32 max_compute_workgroup_size_y;
+	u32 max_compute_workgroup_size_z;
+	u32 max_compute_workgroups_per_dimension;
+	u32 max_push_constant_size;
+} ZiDeviceLimits;
+
 typedef struct ZiRenderDevice {
 	void (*init)();
 	void (*terminate)();
+	void (*get_device_limits)(ZiDeviceLimits* limits);
 
 	// Buffer
 	ZiBufferHandle          (*buffer_create)(const ZiBufferDesc* desc);
 	void                    (*buffer_destroy)(ZiBufferHandle handle);
 	void                    (*buffer_write)(ZiBufferHandle handle, u64 offset, const void* data, u64 size);
+	void*                   (*buffer_map)(ZiBufferHandle handle, u64 offset, u64 size);
+	void                    (*buffer_unmap)(ZiBufferHandle handle);
 
 	// Texture
 	ZiTextureHandle         (*texture_create)(const ZiTextureDesc* desc);
@@ -423,9 +476,17 @@ typedef struct ZiRenderDevice {
 	ZiShaderHandle          (*shader_create)(const ZiShaderDesc* desc);
 	void                    (*shader_destroy)(ZiShaderHandle handle);
 
-	// Pipeline
-	ZiPipelineHandle        (*pipeline_create)(const ZiPipelineDesc* desc);
-	void                    (*pipeline_destroy)(ZiPipelineHandle handle);
+	// Pipeline Layout
+	ZiPipelineLayoutHandle  (*pipeline_layout_create)(const ZiPipelineLayoutDesc* desc);
+	void                    (*pipeline_layout_destroy)(ZiPipelineLayoutHandle handle);
+
+	// Graphics Pipeline
+	ZiPipelineHandle        (*graphics_pipeline_create)(const ZiGraphicsPipelineDesc* desc);
+	void                    (*graphics_pipeline_destroy)(ZiPipelineHandle handle);
+
+	// Compute Pipeline
+	ZiPipelineHandle        (*compute_pipeline_create)(const ZiComputePipelineDesc* desc);
+	void                    (*compute_pipeline_destroy)(ZiPipelineHandle handle);
 
 	// Bind Group Layout
 	ZiBindGroupLayoutHandle (*bind_group_layout_create)(const ZiBindGroupLayoutDesc* desc);
@@ -454,7 +515,8 @@ typedef struct ZiRenderDevice {
 	void                    (*cmd_set_pipeline)(ZiCommandBufferHandle cmd, ZiPipelineHandle pipeline);
 	void                    (*cmd_set_bind_group)(ZiCommandBufferHandle cmd, u32 index, ZiBindGroupHandle bind_group);
 	void                    (*cmd_set_vertex_buffer)(ZiCommandBufferHandle cmd, u32 slot, ZiBufferHandle buffer, u64 offset);
-	void                    (*cmd_set_index_buffer)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiFormat format);
+	void                    (*cmd_set_index_buffer)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiIndexFormat format);
+	void                    (*cmd_push_constants)(ZiCommandBufferHandle cmd, ZiShaderStage stages, u32 offset, u32 size, const void* data);
 	void                    (*cmd_set_viewport)(ZiCommandBufferHandle cmd, f32 x, f32 y, f32 width, f32 height, f32 min_depth, f32 max_depth);
 	void                    (*cmd_set_scissor)(ZiCommandBufferHandle cmd, u32 x, u32 y, u32 width, u32 height);
 	void                    (*cmd_set_blend_constant)(ZiCommandBufferHandle cmd, f32 color[4]);
@@ -480,17 +542,26 @@ typedef struct ZiRenderDevice {
 	ZiSwapchainHandle       (*swapchain_create)(const ZiSwapchainDesc* desc);
 	void                    (*swapchain_destroy)(ZiSwapchainHandle handle);
 	void                    (*swapchain_resize)(ZiSwapchainHandle handle, u32 width, u32 height);
-	ZiTextureHandle         (*swapchain_get_current_texture)(ZiSwapchainHandle handle);
+	u32                     (*swapchain_get_texture_count)(ZiSwapchainHandle handle);
+	ZiTextureHandle         (*swapchain_get_texture)(ZiSwapchainHandle handle, u32 index);
 	void                    (*swapchain_present)(ZiSwapchainHandle handle);
+
+	// Debug
+	void                    (*set_object_name)(void* handle, const char* name);
+	void                    (*cmd_begin_debug_label)(ZiCommandBufferHandle cmd, const char* label);
+	void                    (*cmd_end_debug_label)(ZiCommandBufferHandle cmd);
 } ZiRenderDevice;
 
 void zi_graphics_init(ZiGraphicsBackend backend);
 void zi_graphics_terminate();
+void zi_get_device_limits(ZiDeviceLimits* limits);
 
 // Buffer
 ZiBufferHandle          zi_buffer_create(const ZiBufferDesc* desc);
 void                    zi_buffer_destroy(ZiBufferHandle handle);
 void                    zi_buffer_write(ZiBufferHandle handle, u64 offset, const void* data, u64 size);
+void*                   zi_buffer_map(ZiBufferHandle handle, u64 offset, u64 size);
+void                    zi_buffer_unmap(ZiBufferHandle handle);
 
 // Texture
 ZiTextureHandle         zi_texture_create(const ZiTextureDesc* desc);
@@ -508,9 +579,17 @@ void                    zi_sampler_destroy(ZiSamplerHandle handle);
 ZiShaderHandle          zi_shader_create(const ZiShaderDesc* desc);
 void                    zi_shader_destroy(ZiShaderHandle handle);
 
-// Pipeline
-ZiPipelineHandle        zi_pipeline_create(const ZiPipelineDesc* desc);
-void                    zi_pipeline_destroy(ZiPipelineHandle handle);
+// Pipeline Layout
+ZiPipelineLayoutHandle  zi_pipeline_layout_create(const ZiPipelineLayoutDesc* desc);
+void                    zi_pipeline_layout_destroy(ZiPipelineLayoutHandle handle);
+
+// Graphics Pipeline
+ZiPipelineHandle        zi_graphics_pipeline_create(const ZiGraphicsPipelineDesc* desc);
+void                    zi_graphics_pipeline_destroy(ZiPipelineHandle handle);
+
+// Compute Pipeline
+ZiPipelineHandle        zi_compute_pipeline_create(const ZiComputePipelineDesc* desc);
+void                    zi_compute_pipeline_destroy(ZiPipelineHandle handle);
 
 // Bind Group Layout
 ZiBindGroupLayoutHandle zi_bind_group_layout_create(const ZiBindGroupLayoutDesc* desc);
@@ -539,7 +618,8 @@ void                    zi_cmd_end_render_pass(ZiCommandBufferHandle cmd);
 void                    zi_cmd_set_pipeline(ZiCommandBufferHandle cmd, ZiPipelineHandle pipeline);
 void                    zi_cmd_set_bind_group(ZiCommandBufferHandle cmd, u32 index, ZiBindGroupHandle bind_group);
 void                    zi_cmd_set_vertex_buffer(ZiCommandBufferHandle cmd, u32 slot, ZiBufferHandle buffer, u64 offset);
-void                    zi_cmd_set_index_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiFormat format);
+void                    zi_cmd_set_index_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiIndexFormat format);
+void                    zi_cmd_push_constants(ZiCommandBufferHandle cmd, ZiShaderStage stages, u32 offset, u32 size, const void* data);
 void                    zi_cmd_set_viewport(ZiCommandBufferHandle cmd, f32 x, f32 y, f32 width, f32 height, f32 min_depth, f32 max_depth);
 void                    zi_cmd_set_scissor(ZiCommandBufferHandle cmd, u32 x, u32 y, u32 width, u32 height);
 void                    zi_cmd_set_blend_constant(ZiCommandBufferHandle cmd, f32 color[4]);
@@ -565,5 +645,11 @@ void                    zi_cmd_copy_texture_to_buffer(ZiCommandBufferHandle cmd,
 ZiSwapchainHandle       zi_swapchain_create(const ZiSwapchainDesc* desc);
 void                    zi_swapchain_destroy(ZiSwapchainHandle handle);
 void                    zi_swapchain_resize(ZiSwapchainHandle handle, u32 width, u32 height);
-ZiTextureHandle         zi_swapchain_get_current_texture(ZiSwapchainHandle handle);
+u32                     zi_swapchain_get_texture_count(ZiSwapchainHandle handle);
+ZiTextureHandle         zi_swapchain_get_texture(ZiSwapchainHandle handle, u32 index);
 void                    zi_swapchain_present(ZiSwapchainHandle handle);
+
+// Debug
+void                    zi_set_object_name(void* handle, const char* name);
+void                    zi_cmd_begin_debug_label(ZiCommandBufferHandle cmd, const char* label);
+void                    zi_cmd_end_debug_label(ZiCommandBufferHandle cmd);
