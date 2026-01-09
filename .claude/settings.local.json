@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"C:\\\\dev\\\\zirconengine\\\\zircon\")",
+      "Bash(mkdir:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}
