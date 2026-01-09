@@ -55,4 +55,7 @@ VoidPtr zi_platform_get_native_handle(ZiWindow window);
 // Console/logging
 void zi_platform_console_log(const char* message, i32 len, u8 error);
 
+// Time formatting (writes to buf, returns chars written, format: "YYYY-MM-DD HH:MM:SS:mmm")
+i32 zi_platform_get_timestamp(char* buf, i32 buf_size);
+
 ZiGraphicsBackend zi_platform_get_graphics_backend(ZiGraphicsBackend backend);

@@ -19,11 +19,17 @@ typedef const void* ConstPtr;
 typedef char*       CharPtr;
 typedef const char* ConstChr;
 
-#if _WIN64
+#if defined(_WIN64)
 #define ZI_WIN 1
 #define ZI_API __declspec(dllexport)
 #elif defined(__EMSCRIPTEN__)
 #define ZI_EMSCRIPTEN 1
+#define ZI_API
+#elif defined(__linux__)
+#define ZI_LINUX 1
+#define ZI_API
+#elif defined(__APPLE__)
+#define ZI_MACOS 1
 #define ZI_API
 #else
 #define ZI_API

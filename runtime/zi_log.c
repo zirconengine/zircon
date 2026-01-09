@@ -16,7 +16,10 @@ void zi_log(ZiLogLevel level, const char* fmt, ...) {
 	vsnprintf(buffer, sizeof(buffer), fmt, args);
 	va_end(args);
 
+	char time_str[32];
+	zi_platform_get_timestamp(time_str, sizeof(time_str));
+
 	char buffer2[1024];
-	i32  size = snprintf(buffer2, sizeof(buffer2), "[%s] %s\n", level_desc[level], buffer);
+	i32  size = snprintf(buffer2, sizeof(buffer2), "[%s] [%s] %s\n", time_str, level_desc[level], buffer);
 	zi_platform_console_log(buffer2, size, level >= ZiLogLevel_Error);
 }
