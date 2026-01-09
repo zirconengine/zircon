@@ -177,3 +177,121 @@ static inline void name##_clear(name* map) {                                   \
     map->count = 0;                                                            \
 }
 
+// ============================================================================
+// Dynamic Array
+// ============================================================================
+
+#define ZI_ARRAY_INITIAL_CAPACITY 8
+
+#define ZI_ARRAY(name, type)                                                   \
+                                                                               \
+typedef struct name {                                                          \
+    type*        data;                                                         \
+    u64          count;                                                        \
+    u64          capacity;                                                     \
+    ZiAllocator* allocator;                                                    \
+} name;                                                                        \
+                                                                               \
+static inline void name##_init(name* arr, ZiAllocator* allocator) {            \
+    arr->allocator = allocator ? allocator : zi_get_default_allocator();       \
+    arr->capacity = ZI_ARRAY_INITIAL_CAPACITY;                                 \
+    arr->count = 0;                                                            \
+    u64 size = sizeof(type) * arr->capacity;                                   \
+    arr->data = (type*)arr->allocator->alloc(size, arr->allocator->user_data); \
+}                                                                              \
+                                                                               \
+static inline void name##_init_capacity(name* arr, ZiAllocator* allocator,     \
+                                        u64 capacity) {                        \
+    arr->allocator = allocator ? allocator : zi_get_default_allocator();       \
+    arr->capacity = capacity > 0 ? capacity : ZI_ARRAY_INITIAL_CAPACITY;       \
+    arr->count = 0;                                                            \
+    u64 size = sizeof(type) * arr->capacity;                                   \
+    arr->data = (type*)arr->allocator->alloc(size, arr->allocator->user_data); \
+}                                                                              \
+                                                                               \
+static inline void name##_free(name* arr) {                                    \
+    if (arr->data) {                                                           \
+        arr->allocator->free(arr->data, arr->allocator->user_data);            \
+        arr->data = 0;                                                         \
+    }                                                                          \
+    arr->capacity = 0;                                                         \
+    arr->count = 0;                                                            \
+}                                                                              \
+                                                                               \
+static inline void name##_reserve(name* arr, u64 new_capacity) {               \
+    if (new_capacity <= arr->capacity) return;                                 \
+    u64 size = sizeof(type) * new_capacity;                                    \
+    type* new_data = (type*)arr->allocator->alloc(size,                        \
+                                                  arr->allocator->user_data);  \
+    for (u64 i = 0; i < arr->count; i++) {                                     \
+        new_data[i] = arr->data[i];                                            \
+    }                                                                          \
+    arr->allocator->free(arr->data, arr->allocator->user_data);                \
+    arr->data = new_data;                                                      \
+    arr->capacity = new_capacity;                                              \
+}                                                                              \
+                                                                               \
+static inline void name##_grow(name* arr) {                                    \
+    name##_reserve(arr, arr->capacity * 2);                                    \
+}                                                                              \
+                                                                               \
+static inline void name##_push(name* arr, type value) {                        \
+    if (arr->count >= arr->capacity) {                                         \
+        name##_grow(arr);                                                      \
+    }                                                                          \
+    arr->data[arr->count++] = value;                                           \
+}                                                                              \
+                                                                               \
+static inline type name##_pop(name* arr) {                                     \
+    return arr->data[--arr->count];                                            \
+}                                                                              \
+                                                                               \
+static inline type* name##_get(name* arr, u64 index) {                         \
+    if (index >= arr->count) return 0;                                         \
+    return &arr->data[index];                                                  \
+}                                                                              \
+                                                                               \
+static inline void name##_set(name* arr, u64 index, type value) {              \
+    if (index < arr->count) {                                                  \
+        arr->data[index] = value;                                              \
+    }                                                                          \
+}                                                                              \
+                                                                               \
+static inline void name##_insert(name* arr, u64 index, type value) {           \
+    if (index > arr->count) return;                                            \
+    if (arr->count >= arr->capacity) {                                         \
+        name##_grow(arr);                                                      \
+    }                                                                          \
+    for (u64 i = arr->count; i > index; i--) {                                 \
+        arr->data[i] = arr->data[i - 1];                                       \
+    }                                                                          \
+    arr->data[index] = value;                                                  \
+    arr->count++;                                                              \
+}                                                                              \
+                                                                               \
+static inline void name##_remove(name* arr, u64 index) {                       \
+    if (index >= arr->count) return;                                           \
+    for (u64 i = index; i < arr->count - 1; i++) {                             \
+        arr->data[i] = arr->data[i + 1];                                       \
+    }                                                                          \
+    arr->count--;                                                              \
+}                                                                              \
+                                                                               \
+static inline void name##_remove_swap(name* arr, u64 index) {                  \
+    if (index >= arr->count) return;                                           \
+    arr->data[index] = arr->data[arr->count - 1];                              \
+    arr->count--;                                                              \
+}                                                                              \
+                                                                               \
+static inline void name##_clear(name* arr) {                                   \
+    arr->count = 0;                                                            \
+}                                                                              \
+                                                                               \
+static inline type* name##_first(name* arr) {                                  \
+    return arr->count > 0 ? &arr->data[0] : 0;                                 \
+}                                                                              \
+                                                                               \
+static inline type* name##_last(name* arr) {                                   \
+    return arr->count > 0 ? &arr->data[arr->count - 1] : 0;                    \
+}
+

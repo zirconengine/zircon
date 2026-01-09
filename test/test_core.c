@@ -89,6 +89,22 @@ ZI_HASHMAP(U64Map, u64, f32);
 ZI_HASHMAP(StringMap, ConstChr, i32);
 
 // ============================================================================
+// Array Type Declarations
+// ============================================================================
+
+ZI_ARRAY(IntArray, i32);
+ZI_ARRAY(F32Array, f32);
+ZI_ARRAY(PtrArray, VoidPtr);
+
+typedef struct TestStruct {
+    i32 x;
+    i32 y;
+    f32 z;
+} TestStruct;
+
+ZI_ARRAY(StructArray, TestStruct);
+
+// ============================================================================
 // Unity Setup/Teardown
 // ============================================================================
 
@@ -351,6 +367,261 @@ void test_stringmap_collision_handling(void) {
 }
 
 // ============================================================================
+// Array Tests - Integer Array
+// ============================================================================
+
+void test_intarray_init_free(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    TEST_ASSERT_NOT_NULL(arr.data);
+    TEST_ASSERT_EQUAL_UINT64(ZI_ARRAY_INITIAL_CAPACITY, arr.capacity);
+    TEST_ASSERT_EQUAL_UINT64(0, arr.count);
+    TEST_ASSERT_EQUAL_UINT64(1, g_alloc_count);
+
+    IntArray_free(&arr);
+    TEST_ASSERT_EQUAL_UINT64(1, g_free_count);
+}
+
+void test_intarray_init_capacity(void) {
+    IntArray arr;
+    IntArray_init_capacity(&arr, &g_test_allocator, 100);
+
+    TEST_ASSERT_EQUAL_UINT64(100, arr.capacity);
+    TEST_ASSERT_EQUAL_UINT64(0, arr.count);
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_push_pop(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 20);
+    IntArray_push(&arr, 30);
+
+    TEST_ASSERT_EQUAL_UINT64(3, arr.count);
+
+    TEST_ASSERT_EQUAL_INT32(30, IntArray_pop(&arr));
+    TEST_ASSERT_EQUAL_INT32(20, IntArray_pop(&arr));
+    TEST_ASSERT_EQUAL_INT32(10, IntArray_pop(&arr));
+
+    TEST_ASSERT_EQUAL_UINT64(0, arr.count);
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_get_set(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 100);
+    IntArray_push(&arr, 200);
+    IntArray_push(&arr, 300);
+
+    TEST_ASSERT_EQUAL_INT32(100, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(200, *IntArray_get(&arr, 1));
+    TEST_ASSERT_EQUAL_INT32(300, *IntArray_get(&arr, 2));
+    TEST_ASSERT_NULL(IntArray_get(&arr, 3));
+
+    IntArray_set(&arr, 1, 999);
+    TEST_ASSERT_EQUAL_INT32(999, *IntArray_get(&arr, 1));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_first_last(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    TEST_ASSERT_NULL(IntArray_first(&arr));
+    TEST_ASSERT_NULL(IntArray_last(&arr));
+
+    IntArray_push(&arr, 10);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_first(&arr));
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_last(&arr));
+
+    IntArray_push(&arr, 20);
+    IntArray_push(&arr, 30);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_first(&arr));
+    TEST_ASSERT_EQUAL_INT32(30, *IntArray_last(&arr));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_insert(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 30);
+
+    // Insert in the middle
+    IntArray_insert(&arr, 1, 20);
+
+    TEST_ASSERT_EQUAL_UINT64(3, arr.count);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(20, *IntArray_get(&arr, 1));
+    TEST_ASSERT_EQUAL_INT32(30, *IntArray_get(&arr, 2));
+
+    // Insert at beginning
+    IntArray_insert(&arr, 0, 5);
+    TEST_ASSERT_EQUAL_INT32(5, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_get(&arr, 1));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_remove(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 20);
+    IntArray_push(&arr, 30);
+    IntArray_push(&arr, 40);
+
+    // Remove from middle (preserves order)
+    IntArray_remove(&arr, 1);
+
+    TEST_ASSERT_EQUAL_UINT64(3, arr.count);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(30, *IntArray_get(&arr, 1));
+    TEST_ASSERT_EQUAL_INT32(40, *IntArray_get(&arr, 2));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_remove_swap(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 20);
+    IntArray_push(&arr, 30);
+    IntArray_push(&arr, 40);
+
+    // Remove with swap (faster, doesn't preserve order)
+    IntArray_remove_swap(&arr, 1);
+
+    TEST_ASSERT_EQUAL_UINT64(3, arr.count);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(40, *IntArray_get(&arr, 1)); // 40 swapped to index 1
+    TEST_ASSERT_EQUAL_INT32(30, *IntArray_get(&arr, 2));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_clear(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 20);
+    IntArray_push(&arr, 30);
+
+    IntArray_clear(&arr);
+    TEST_ASSERT_EQUAL_UINT64(0, arr.count);
+    TEST_ASSERT_GREATER_THAN_UINT64(0, arr.capacity); // Capacity preserved
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_reserve(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    IntArray_push(&arr, 10);
+    IntArray_push(&arr, 20);
+
+    IntArray_reserve(&arr, 100);
+
+    TEST_ASSERT_EQUAL_UINT64(100, arr.capacity);
+    TEST_ASSERT_EQUAL_UINT64(2, arr.count);
+    TEST_ASSERT_EQUAL_INT32(10, *IntArray_get(&arr, 0));
+    TEST_ASSERT_EQUAL_INT32(20, *IntArray_get(&arr, 1));
+
+    IntArray_free(&arr);
+}
+
+void test_intarray_grow(void) {
+    IntArray arr;
+    IntArray_init(&arr, &g_test_allocator);
+
+    u64 initial_capacity = arr.capacity;
+
+    // Push more than initial capacity to trigger grow
+    for (i32 i = 0; i < 20; i++) {
+        IntArray_push(&arr, i);
+    }
+
+    TEST_ASSERT_GREATER_THAN_UINT64(initial_capacity, arr.capacity);
+    TEST_ASSERT_EQUAL_UINT64(20, arr.count);
+
+    // Verify values
+    for (i32 i = 0; i < 20; i++) {
+        TEST_ASSERT_EQUAL_INT32(i, *IntArray_get(&arr, i));
+    }
+
+    IntArray_free(&arr);
+}
+
+// ============================================================================
+// Array Tests - Float Array
+// ============================================================================
+
+void test_f32array_basic(void) {
+    F32Array arr;
+    F32Array_init(&arr, &g_test_allocator);
+
+    F32Array_push(&arr, 1.5f);
+    F32Array_push(&arr, 2.5f);
+    F32Array_push(&arr, 3.5f);
+
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 1.5f, *F32Array_get(&arr, 0));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.5f, *F32Array_get(&arr, 1));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.5f, *F32Array_get(&arr, 2));
+
+    F32Array_free(&arr);
+}
+
+// ============================================================================
+// Array Tests - Struct Array
+// ============================================================================
+
+void test_structarray_basic(void) {
+    StructArray arr;
+    StructArray_init(&arr, &g_test_allocator);
+
+    TestStruct s1 = { .x = 1, .y = 2, .z = 3.0f };
+    TestStruct s2 = { .x = 4, .y = 5, .z = 6.0f };
+    TestStruct s3 = { .x = 7, .y = 8, .z = 9.0f };
+
+    StructArray_push(&arr, s1);
+    StructArray_push(&arr, s2);
+    StructArray_push(&arr, s3);
+
+    TEST_ASSERT_EQUAL_UINT64(3, arr.count);
+
+    TestStruct* p1 = StructArray_get(&arr, 0);
+    TestStruct* p2 = StructArray_get(&arr, 1);
+    TestStruct* p3 = StructArray_get(&arr, 2);
+
+    TEST_ASSERT_EQUAL_INT32(1, p1->x);
+    TEST_ASSERT_EQUAL_INT32(2, p1->y);
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 3.0f, p1->z);
+
+    TEST_ASSERT_EQUAL_INT32(4, p2->x);
+    TEST_ASSERT_EQUAL_INT32(5, p2->y);
+
+    TEST_ASSERT_EQUAL_INT32(7, p3->x);
+    TEST_ASSERT_EQUAL_INT32(8, p3->y);
+
+    StructArray_free(&arr);
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -377,6 +648,25 @@ int main(void) {
     // StringMap (ConstChr -> i32) tests
     RUN_TEST(test_stringmap_basic);
     RUN_TEST(test_stringmap_collision_handling);
+
+    // IntArray tests
+    RUN_TEST(test_intarray_init_free);
+    RUN_TEST(test_intarray_init_capacity);
+    RUN_TEST(test_intarray_push_pop);
+    RUN_TEST(test_intarray_get_set);
+    RUN_TEST(test_intarray_first_last);
+    RUN_TEST(test_intarray_insert);
+    RUN_TEST(test_intarray_remove);
+    RUN_TEST(test_intarray_remove_swap);
+    RUN_TEST(test_intarray_clear);
+    RUN_TEST(test_intarray_reserve);
+    RUN_TEST(test_intarray_grow);
+
+    // F32Array tests
+    RUN_TEST(test_f32array_basic);
+
+    // StructArray tests
+    RUN_TEST(test_structarray_basic);
 
     return UNITY_END();
 }
