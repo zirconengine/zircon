@@ -1,5 +1,6 @@
 # CMake
 
+.claude
 .idea*/
 cmake-build-*/
 .vs

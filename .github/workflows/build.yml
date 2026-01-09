@@ -6,18 +6,32 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  VULKAN_SDK_VERSION: '1.3.290.0'
+
 jobs:
   build-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v4
         with:
-          vulkan-query-version: 1.3.204.0
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
-          vulkan-use-cache: true
+          path: C:\VulkanSDK
+          key: vulkan-sdk-${{ env.VULKAN_SDK_VERSION }}-windows
+
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        run: |
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/windows/VulkanSDK-${{ env.VULKAN_SDK_VERSION }}-Installer.exe" -OutFile VulkanSDK.exe
+          Start-Process -FilePath .\VulkanSDK.exe -ArgumentList "--root C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }} --accept-licenses --default-answer --confirm-command install" -Wait
+
+      - name: Set Vulkan SDK environment
+        run: |
+          echo "VULKAN_SDK=C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }}" >> $env:GITHUB_ENV
+          echo "C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }}\Bin" >> $env:GITHUB_PATH
 
       - name: Configure CMake
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
@@ -39,12 +53,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake build-essential libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libwayland-dev libxkbcommon-dev
 
-      - name: Setup Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v4
         with:
-          vulkan-query-version: 1.3.204.0
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
-          vulkan-use-cache: true
+          path: ~/vulkan-sdk
+          key: vulkan-sdk-${{ env.VULKAN_SDK_VERSION }}-linux
+
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/vulkan-sdk
+          wget -q https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/linux/vulkansdk-linux-x86_64-${{ env.VULKAN_SDK_VERSION }}.tar.xz -O vulkan-sdk.tar.xz
+          tar -xf vulkan-sdk.tar.xz -C ~/vulkan-sdk --strip-components=1
+
+      - name: Set Vulkan SDK environment
+        run: |
+          echo "VULKAN_SDK=$HOME/vulkan-sdk/x86_64" >> $GITHUB_ENV
+          echo "$HOME/vulkan-sdk/x86_64/bin" >> $GITHUB_PATH
+          echo "LD_LIBRARY_PATH=$HOME/vulkan-sdk/x86_64/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Configure CMake
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
@@ -61,12 +88,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Vulkan SDK
-        uses: humbletim/setup-vulkan-sdk@v1.2.0
+      - name: Cache Vulkan SDK
+        id: cache-vulkan
+        uses: actions/cache@v4
         with:
-          vulkan-query-version: 1.3.204.0
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
-          vulkan-use-cache: true
+          path: ~/vulkan-sdk
+          key: vulkan-sdk-${{ env.VULKAN_SDK_VERSION }}-macos
+
+      - name: Install Vulkan SDK
+        if: steps.cache-vulkan.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/vulkan-sdk
+          wget -q https://sdk.lunarg.com/sdk/download/${{ env.VULKAN_SDK_VERSION }}/mac/vulkansdk-macos-${{ env.VULKAN_SDK_VERSION }}.dmg -O vulkan-sdk.dmg
+          hdiutil attach vulkan-sdk.dmg -mountpoint /Volumes/VulkanSDK
+          sudo /Volumes/VulkanSDK/InstallVulkan.app/Contents/MacOS/InstallVulkan --root ~/vulkan-sdk --accept-licenses --default-answer --confirm-command install
+          hdiutil detach /Volumes/VulkanSDK
+
+      - name: Set Vulkan SDK environment
+        run: |
+          echo "VULKAN_SDK=$HOME/vulkan-sdk/macOS" >> $GITHUB_ENV
+          echo "$HOME/vulkan-sdk/macOS/bin" >> $GITHUB_PATH
+          echo "DYLD_LIBRARY_PATH=$HOME/vulkan-sdk/macOS/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Configure CMake
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
