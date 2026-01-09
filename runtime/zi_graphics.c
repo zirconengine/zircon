@@ -34,10 +34,14 @@ void zi_graphics_terminate() {
 	device.terminate();
 }
 
+void zi_get_device_limits(ZiDeviceLimits* limits) { device.get_device_limits(limits); }
+
 // Buffer
 ZiBufferHandle zi_buffer_create(const ZiBufferDesc* desc) { return device.buffer_create(desc); }
 void zi_buffer_destroy(ZiBufferHandle handle) { device.buffer_destroy(handle); }
 void zi_buffer_write(ZiBufferHandle handle, u64 offset, const void* data, u64 size) { device.buffer_write(handle, offset, data, size); }
+void* zi_buffer_map(ZiBufferHandle handle, u64 offset, u64 size) { return device.buffer_map(handle, offset, size); }
+void zi_buffer_unmap(ZiBufferHandle handle) { device.buffer_unmap(handle); }
 
 // Texture
 ZiTextureHandle zi_texture_create(const ZiTextureDesc* desc) { return device.texture_create(desc); }
@@ -55,9 +59,17 @@ void zi_sampler_destroy(ZiSamplerHandle handle) { device.sampler_destroy(handle)
 ZiShaderHandle zi_shader_create(const ZiShaderDesc* desc) { return device.shader_create(desc); }
 void zi_shader_destroy(ZiShaderHandle handle) { device.shader_destroy(handle); }
 
-// Pipeline
-ZiPipelineHandle zi_pipeline_create(const ZiPipelineDesc* desc) { return device.pipeline_create(desc); }
-void zi_pipeline_destroy(ZiPipelineHandle handle) { device.pipeline_destroy(handle); }
+// Pipeline Layout
+ZiPipelineLayoutHandle zi_pipeline_layout_create(const ZiPipelineLayoutDesc* desc) { return device.pipeline_layout_create(desc); }
+void zi_pipeline_layout_destroy(ZiPipelineLayoutHandle handle) { device.pipeline_layout_destroy(handle); }
+
+// Graphics Pipeline
+ZiPipelineHandle zi_graphics_pipeline_create(const ZiGraphicsPipelineDesc* desc) { return device.graphics_pipeline_create(desc); }
+void zi_graphics_pipeline_destroy(ZiPipelineHandle handle) { device.graphics_pipeline_destroy(handle); }
+
+// Compute Pipeline
+ZiPipelineHandle zi_compute_pipeline_create(const ZiComputePipelineDesc* desc) { return device.compute_pipeline_create(desc); }
+void zi_compute_pipeline_destroy(ZiPipelineHandle handle) { device.compute_pipeline_destroy(handle); }
 
 // Bind Group Layout
 ZiBindGroupLayoutHandle zi_bind_group_layout_create(const ZiBindGroupLayoutDesc* desc) { return device.bind_group_layout_create(desc); }
@@ -86,7 +98,8 @@ void zi_cmd_end_render_pass(ZiCommandBufferHandle cmd) { device.cmd_end_render_p
 void zi_cmd_set_pipeline(ZiCommandBufferHandle cmd, ZiPipelineHandle pipeline) { device.cmd_set_pipeline(cmd, pipeline); }
 void zi_cmd_set_bind_group(ZiCommandBufferHandle cmd, u32 index, ZiBindGroupHandle bind_group) { device.cmd_set_bind_group(cmd, index, bind_group); }
 void zi_cmd_set_vertex_buffer(ZiCommandBufferHandle cmd, u32 slot, ZiBufferHandle buffer, u64 offset) { device.cmd_set_vertex_buffer(cmd, slot, buffer, offset); }
-void zi_cmd_set_index_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiFormat format) { device.cmd_set_index_buffer(cmd, buffer, offset, format); }
+void zi_cmd_set_index_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiIndexFormat format) { device.cmd_set_index_buffer(cmd, buffer, offset, format); }
+void zi_cmd_push_constants(ZiCommandBufferHandle cmd, ZiShaderStage stages, u32 offset, u32 size, const void* data) { device.cmd_push_constants(cmd, stages, offset, size, data); }
 void zi_cmd_set_viewport(ZiCommandBufferHandle cmd, f32 x, f32 y, f32 width, f32 height, f32 min_depth, f32 max_depth) { device.cmd_set_viewport(cmd, x, y, width, height, min_depth, max_depth); }
 void zi_cmd_set_scissor(ZiCommandBufferHandle cmd, u32 x, u32 y, u32 width, u32 height) { device.cmd_set_scissor(cmd, x, y, width, height); }
 void zi_cmd_set_blend_constant(ZiCommandBufferHandle cmd, f32 color[4]) { device.cmd_set_blend_constant(cmd, color); }
@@ -112,5 +125,11 @@ void zi_cmd_copy_texture_to_buffer(ZiCommandBufferHandle cmd, ZiTextureHandle sr
 ZiSwapchainHandle zi_swapchain_create(const ZiSwapchainDesc* desc) { return device.swapchain_create(desc); }
 void zi_swapchain_destroy(ZiSwapchainHandle handle) { device.swapchain_destroy(handle); }
 void zi_swapchain_resize(ZiSwapchainHandle handle, u32 width, u32 height) { device.swapchain_resize(handle, width, height); }
-ZiTextureHandle zi_swapchain_get_current_texture(ZiSwapchainHandle handle) { return device.swapchain_get_current_texture(handle); }
+u32 zi_swapchain_get_texture_count(ZiSwapchainHandle handle) { return device.swapchain_get_texture_count(handle); }
+ZiTextureHandle zi_swapchain_get_texture(ZiSwapchainHandle handle, u32 index) { return device.swapchain_get_texture(handle, index); }
 void zi_swapchain_present(ZiSwapchainHandle handle) { device.swapchain_present(handle); }
+
+// Debug
+void zi_set_object_name(void* handle, const char* name) { device.set_object_name(handle, name); }
+void zi_cmd_begin_debug_label(ZiCommandBufferHandle cmd, const char* label) { device.cmd_begin_debug_label(cmd, label); }
+void zi_cmd_end_debug_label(ZiCommandBufferHandle cmd) { device.cmd_end_debug_label(cmd); }
