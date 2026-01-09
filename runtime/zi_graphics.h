@@ -4,6 +4,7 @@
 
 ZI_HANDLER(ZiBufferHandle);
 ZI_HANDLER(ZiTextureHandle);
+ZI_HANDLER(ZiTextureViewHandle);
 ZI_HANDLER(ZiSamplerHandle);
 ZI_HANDLER(ZiRenderPassHandle);
 ZI_HANDLER(ZiCommandBufferHandle);
@@ -106,6 +107,37 @@ typedef struct ZiTextureDesc {
 	u32                array_layers;
 	ZiTextureUsage     usage;
 } ZiTextureDesc;
+
+enum ZiTextureViewDimension_ {
+	ZiTextureViewDimension_1D = 0,
+	ZiTextureViewDimension_2D,
+	ZiTextureViewDimension_2DArray,
+	ZiTextureViewDimension_Cube,
+	ZiTextureViewDimension_CubeArray,
+	ZiTextureViewDimension_3D,
+};
+
+typedef u32 ZiTextureViewDimension;
+
+enum ZiTextureAspect_ {
+	ZiTextureAspect_All = 0,
+	ZiTextureAspect_Color,
+	ZiTextureAspect_Depth,
+	ZiTextureAspect_Stencil,
+};
+
+typedef u32 ZiTextureAspect;
+
+typedef struct ZiTextureViewDesc {
+	ZiTextureHandle        texture;
+	ZiTextureViewDimension dimension;
+	ZiFormat               format;
+	ZiTextureAspect        aspect;
+	u32                    base_mip_level;
+	u32                    mip_level_count;
+	u32                    base_array_layer;
+	u32                    array_layer_count;
+} ZiTextureViewDesc;
 
 enum ZiFilterMode_ {
 	ZiFilterMode_Nearest = 0,
@@ -369,7 +401,169 @@ typedef struct ZiSwapchainDesc {
 typedef struct ZiRenderDevice {
 	void (*init)();
 	void (*terminate)();
+
+	// Buffer
+	ZiBufferHandle          (*buffer_create)(const ZiBufferDesc* desc);
+	void                    (*buffer_destroy)(ZiBufferHandle handle);
+	void                    (*buffer_write)(ZiBufferHandle handle, u64 offset, const void* data, u64 size);
+
+	// Texture
+	ZiTextureHandle         (*texture_create)(const ZiTextureDesc* desc);
+	void                    (*texture_destroy)(ZiTextureHandle handle);
+
+	// Texture View
+	ZiTextureViewHandle     (*texture_view_create)(const ZiTextureViewDesc* desc);
+	void                    (*texture_view_destroy)(ZiTextureViewHandle handle);
+
+	// Sampler
+	ZiSamplerHandle         (*sampler_create)(const ZiSamplerDesc* desc);
+	void                    (*sampler_destroy)(ZiSamplerHandle handle);
+
+	// Shader
+	ZiShaderHandle          (*shader_create)(const ZiShaderDesc* desc);
+	void                    (*shader_destroy)(ZiShaderHandle handle);
+
+	// Pipeline
+	ZiPipelineHandle        (*pipeline_create)(const ZiPipelineDesc* desc);
+	void                    (*pipeline_destroy)(ZiPipelineHandle handle);
+
+	// Bind Group Layout
+	ZiBindGroupLayoutHandle (*bind_group_layout_create)(const ZiBindGroupLayoutDesc* desc);
+	void                    (*bind_group_layout_destroy)(ZiBindGroupLayoutHandle handle);
+
+	// Bind Group
+	ZiBindGroupHandle       (*bind_group_create)(const ZiBindGroupDesc* desc);
+	void                    (*bind_group_destroy)(ZiBindGroupHandle handle);
+
+	// Render Pass
+	ZiRenderPassHandle      (*render_pass_create)(const ZiRenderPassDesc* desc);
+	void                    (*render_pass_destroy)(ZiRenderPassHandle handle);
+
+	// Command Buffer
+	ZiCommandBufferHandle   (*command_buffer_create)();
+	void                    (*command_buffer_destroy)(ZiCommandBufferHandle handle);
+	void                    (*command_buffer_begin)(ZiCommandBufferHandle handle);
+	void                    (*command_buffer_end)(ZiCommandBufferHandle handle);
+	void                    (*command_buffer_submit)(ZiCommandBufferHandle handle);
+
+	// Command Buffer - Render Pass
+	void                    (*cmd_begin_render_pass)(ZiCommandBufferHandle cmd, const ZiRenderPassDesc* desc);
+	void                    (*cmd_end_render_pass)(ZiCommandBufferHandle cmd);
+
+	// Command Buffer - State
+	void                    (*cmd_set_pipeline)(ZiCommandBufferHandle cmd, ZiPipelineHandle pipeline);
+	void                    (*cmd_set_bind_group)(ZiCommandBufferHandle cmd, u32 index, ZiBindGroupHandle bind_group);
+	void                    (*cmd_set_vertex_buffer)(ZiCommandBufferHandle cmd, u32 slot, ZiBufferHandle buffer, u64 offset);
+	void                    (*cmd_set_index_buffer)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiFormat format);
+	void                    (*cmd_set_viewport)(ZiCommandBufferHandle cmd, f32 x, f32 y, f32 width, f32 height, f32 min_depth, f32 max_depth);
+	void                    (*cmd_set_scissor)(ZiCommandBufferHandle cmd, u32 x, u32 y, u32 width, u32 height);
+	void                    (*cmd_set_blend_constant)(ZiCommandBufferHandle cmd, f32 color[4]);
+	void                    (*cmd_set_stencil_reference)(ZiCommandBufferHandle cmd, u32 reference);
+
+	// Command Buffer - Draw
+	void                    (*cmd_draw)(ZiCommandBufferHandle cmd, u32 vertex_count, u32 instance_count, u32 first_vertex, u32 first_instance);
+	void                    (*cmd_draw_indexed)(ZiCommandBufferHandle cmd, u32 index_count, u32 instance_count, u32 first_index, i32 vertex_offset, u32 first_instance);
+	void                    (*cmd_draw_indirect)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, u32 draw_count, u32 stride);
+	void                    (*cmd_draw_indexed_indirect)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, u32 draw_count, u32 stride);
+
+	// Command Buffer - Compute
+	void                    (*cmd_dispatch)(ZiCommandBufferHandle cmd, u32 group_count_x, u32 group_count_y, u32 group_count_z);
+	void                    (*cmd_dispatch_indirect)(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset);
+
+	// Command Buffer - Copy
+	void                    (*cmd_copy_buffer)(ZiCommandBufferHandle cmd, ZiBufferHandle src, u64 src_offset, ZiBufferHandle dst, u64 dst_offset, u64 size);
+	void                    (*cmd_copy_texture)(ZiCommandBufferHandle cmd, ZiTextureHandle src, ZiTextureHandle dst);
+	void                    (*cmd_copy_buffer_to_texture)(ZiCommandBufferHandle cmd, ZiBufferHandle src, u64 src_offset, ZiTextureHandle dst, u32 mip_level, u32 array_layer);
+	void                    (*cmd_copy_texture_to_buffer)(ZiCommandBufferHandle cmd, ZiTextureHandle src, u32 mip_level, u32 array_layer, ZiBufferHandle dst, u64 dst_offset);
+
+	// Swapchain
+	ZiSwapchainHandle       (*swapchain_create)(const ZiSwapchainDesc* desc);
+	void                    (*swapchain_destroy)(ZiSwapchainHandle handle);
+	void                    (*swapchain_resize)(ZiSwapchainHandle handle, u32 width, u32 height);
+	ZiTextureHandle         (*swapchain_get_current_texture)(ZiSwapchainHandle handle);
+	void                    (*swapchain_present)(ZiSwapchainHandle handle);
 } ZiRenderDevice;
 
 void zi_graphics_init(ZiGraphicsBackend backend);
 void zi_graphics_terminate();
+
+// Buffer
+ZiBufferHandle          zi_buffer_create(const ZiBufferDesc* desc);
+void                    zi_buffer_destroy(ZiBufferHandle handle);
+void                    zi_buffer_write(ZiBufferHandle handle, u64 offset, const void* data, u64 size);
+
+// Texture
+ZiTextureHandle         zi_texture_create(const ZiTextureDesc* desc);
+void                    zi_texture_destroy(ZiTextureHandle handle);
+
+// Texture View
+ZiTextureViewHandle     zi_texture_view_create(const ZiTextureViewDesc* desc);
+void                    zi_texture_view_destroy(ZiTextureViewHandle handle);
+
+// Sampler
+ZiSamplerHandle         zi_sampler_create(const ZiSamplerDesc* desc);
+void                    zi_sampler_destroy(ZiSamplerHandle handle);
+
+// Shader
+ZiShaderHandle          zi_shader_create(const ZiShaderDesc* desc);
+void                    zi_shader_destroy(ZiShaderHandle handle);
+
+// Pipeline
+ZiPipelineHandle        zi_pipeline_create(const ZiPipelineDesc* desc);
+void                    zi_pipeline_destroy(ZiPipelineHandle handle);
+
+// Bind Group Layout
+ZiBindGroupLayoutHandle zi_bind_group_layout_create(const ZiBindGroupLayoutDesc* desc);
+void                    zi_bind_group_layout_destroy(ZiBindGroupLayoutHandle handle);
+
+// Bind Group
+ZiBindGroupHandle       zi_bind_group_create(const ZiBindGroupDesc* desc);
+void                    zi_bind_group_destroy(ZiBindGroupHandle handle);
+
+// Render Pass
+ZiRenderPassHandle      zi_render_pass_create(const ZiRenderPassDesc* desc);
+void                    zi_render_pass_destroy(ZiRenderPassHandle handle);
+
+// Command Buffer
+ZiCommandBufferHandle   zi_command_buffer_create();
+void                    zi_command_buffer_destroy(ZiCommandBufferHandle handle);
+void                    zi_command_buffer_begin(ZiCommandBufferHandle handle);
+void                    zi_command_buffer_end(ZiCommandBufferHandle handle);
+void                    zi_command_buffer_submit(ZiCommandBufferHandle handle);
+
+// Command Buffer - Render Pass
+void                    zi_cmd_begin_render_pass(ZiCommandBufferHandle cmd, const ZiRenderPassDesc* desc);
+void                    zi_cmd_end_render_pass(ZiCommandBufferHandle cmd);
+
+// Command Buffer - State
+void                    zi_cmd_set_pipeline(ZiCommandBufferHandle cmd, ZiPipelineHandle pipeline);
+void                    zi_cmd_set_bind_group(ZiCommandBufferHandle cmd, u32 index, ZiBindGroupHandle bind_group);
+void                    zi_cmd_set_vertex_buffer(ZiCommandBufferHandle cmd, u32 slot, ZiBufferHandle buffer, u64 offset);
+void                    zi_cmd_set_index_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, ZiFormat format);
+void                    zi_cmd_set_viewport(ZiCommandBufferHandle cmd, f32 x, f32 y, f32 width, f32 height, f32 min_depth, f32 max_depth);
+void                    zi_cmd_set_scissor(ZiCommandBufferHandle cmd, u32 x, u32 y, u32 width, u32 height);
+void                    zi_cmd_set_blend_constant(ZiCommandBufferHandle cmd, f32 color[4]);
+void                    zi_cmd_set_stencil_reference(ZiCommandBufferHandle cmd, u32 reference);
+
+// Command Buffer - Draw
+void                    zi_cmd_draw(ZiCommandBufferHandle cmd, u32 vertex_count, u32 instance_count, u32 first_vertex, u32 first_instance);
+void                    zi_cmd_draw_indexed(ZiCommandBufferHandle cmd, u32 index_count, u32 instance_count, u32 first_index, i32 vertex_offset, u32 first_instance);
+void                    zi_cmd_draw_indirect(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, u32 draw_count, u32 stride);
+void                    zi_cmd_draw_indexed_indirect(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset, u32 draw_count, u32 stride);
+
+// Command Buffer - Compute
+void                    zi_cmd_dispatch(ZiCommandBufferHandle cmd, u32 group_count_x, u32 group_count_y, u32 group_count_z);
+void                    zi_cmd_dispatch_indirect(ZiCommandBufferHandle cmd, ZiBufferHandle buffer, u64 offset);
+
+// Command Buffer - Copy
+void                    zi_cmd_copy_buffer(ZiCommandBufferHandle cmd, ZiBufferHandle src, u64 src_offset, ZiBufferHandle dst, u64 dst_offset, u64 size);
+void                    zi_cmd_copy_texture(ZiCommandBufferHandle cmd, ZiTextureHandle src, ZiTextureHandle dst);
+void                    zi_cmd_copy_buffer_to_texture(ZiCommandBufferHandle cmd, ZiBufferHandle src, u64 src_offset, ZiTextureHandle dst, u32 mip_level, u32 array_layer);
+void                    zi_cmd_copy_texture_to_buffer(ZiCommandBufferHandle cmd, ZiTextureHandle src, u32 mip_level, u32 array_layer, ZiBufferHandle dst, u64 dst_offset);
+
+// Swapchain
+ZiSwapchainHandle       zi_swapchain_create(const ZiSwapchainDesc* desc);
+void                    zi_swapchain_destroy(ZiSwapchainHandle handle);
+void                    zi_swapchain_resize(ZiSwapchainHandle handle, u32 width, u32 height);
+ZiTextureHandle         zi_swapchain_get_current_texture(ZiSwapchainHandle handle);
+void                    zi_swapchain_present(ZiSwapchainHandle handle);
