@@ -16,12 +16,22 @@ static VkBool32 vulkan_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT    
 																			VkDebugUtilsMessageTypeFlagsEXT             messageType,
 																			const VkDebugUtilsMessengerCallbackDataEXT* callbackDataExt,
 																			void*                                       userData);
-static ZiBool query_layer_property(const char* layer);
+static ZiBool vulkan_query_layer_property(const char* layer);
+static ZiBool vulkan_query_instance_extension(const char* required_extensions);
+static ZiBool vulkan_query_instance_extensions(const char** required_extensions, u32 required_count);
 
-static VkInstance instance = NULL;
+
 static const char* validation_layer = "VK_LAYER_KHRONOS_validation";
 
+static ZiBool      validation_layers_enabled = ZI_FALSE;
+static ZiBool			 debug_utils_enabled = ZI_FALSE;
+
+static VkInstance               instance = NULL;
+static VkDebugUtilsMessengerEXT debug_utils_messenger_ext;
+
 static void zi_vulkan_init() {
+	ZiBool enable_debug_layers = ZI_TRUE;
+
 	if (volkInitialize() != VK_SUCCESS) {
 		zi_log_error("error on call volkInitialize");
 	}
@@ -40,24 +50,24 @@ static void zi_vulkan_init() {
 	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	createInfo.pApplicationInfo = &applicationInfo;
 
-	u8 validationLayersEnabled = query_layer_property(validation_layer);
+	validation_layers_enabled = enable_debug_layers && vulkan_query_layer_property(validation_layer);
 
-	VkDebugUtilsMessengerCreateInfoEXT debugUtilsMessengerCreateInfo = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
+	VkDebugUtilsMessengerCreateInfoEXT debug_utils_messenger_create_info = {VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
 
-	if (validationLayersEnabled == ZI_TRUE) {
-		debugUtilsMessengerCreateInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
+	if (validation_layers_enabled == ZI_TRUE) {
+		debug_utils_messenger_create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
 
-		debugUtilsMessengerCreateInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
+		debug_utils_messenger_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
 			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-		debugUtilsMessengerCreateInfo.pfnUserCallback = &vulkan_debug_callback;
+		debug_utils_messenger_create_info.pfnUserCallback = &vulkan_debug_callback;
 
 		createInfo.enabledLayerCount = 1;
 		createInfo.ppEnabledLayerNames = &validation_layer;
-		createInfo.pNext = &debugUtilsMessengerCreateInfo;
+		createInfo.pNext = &debug_utils_messenger_create_info;
 	} else {
 		createInfo.enabledLayerCount = 0;
 	}
@@ -71,11 +81,23 @@ static void zi_vulkan_init() {
 		ConstStrArray_push(&required_extensions, platform_extensions[i]);
 	}
 
+	debug_utils_enabled = enable_debug_layers && vulkan_query_instance_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
+	if (debug_utils_enabled) {
+		ConstStrArray_push(&required_extensions, VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+	}
+
+#if ZI_APPLE
+	if (vulkan_query_instance_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
+		ConstStrArray_push(&required_extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+	}
+#endif
+
 	createInfo.enabledExtensionCount = (u32)required_extensions.count;
 	createInfo.ppEnabledExtensionNames = required_extensions.data;
 
 	VkResult res = vkCreateInstance(&createInfo, NULL, &instance);
-
 
 	if (res != VK_SUCCESS) {
 		zi_log_error("Error on create vkCreateInstance %s", string_VkResult(res));
@@ -83,13 +105,21 @@ static void zi_vulkan_init() {
 
 	volkLoadInstance(instance);
 
-	zi_log_debug("vulkan initialized successfully");
+	if (validation_layers_enabled) {
+		vkCreateDebugUtilsMessengerEXT(instance, &debug_utils_messenger_create_info, ZI_NULL, &debug_utils_messenger_ext);
+	}
 
+	zi_log_debug("vulkan initialized successfully");
 
 	ConstStrArray_free(&required_extensions);
 }
 
 static void zi_vulkan_terminate() {
+
+	if (validation_layers_enabled) {
+		vkDestroyDebugUtilsMessengerEXT(instance, debug_utils_messenger_ext, ZI_NULL);
+	}
+
 	vkDestroyInstance(instance, NULL);
 	zi_log_debug("vulkan terminated successfully");
 }
@@ -292,7 +322,7 @@ static VkBool32 vulkan_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT    
 	return VK_FALSE;
 }
 
-static ZiBool query_layer_property(const char* layer) {
+static ZiBool vulkan_query_layer_property(const char* layer) {
 	ZiBool ret = ZI_FALSE;
 
 	u32 count = 0;
@@ -303,6 +333,38 @@ static ZiBool query_layer_property(const char* layer) {
 	for (u32 i = 0; i < count; ++i) {
 		if (strcmp(layer, props[i].layerName) == 0) {
 			ret = ZI_TRUE;
+			break;
+		}
+	}
+
+	zi_mem_free(props);
+
+	return ret;
+}
+
+static ZiBool vulkan_query_instance_extension(const char* required_extensions) {
+	return vulkan_query_instance_extensions(&required_extensions, 1);
+}
+
+static ZiBool vulkan_query_instance_extensions(const char** required_extensions, u32 required_count) {
+	u32 count = 0;
+	vkEnumerateInstanceExtensionProperties(ZI_NULL, &count, ZI_NULL);
+	VkExtensionProperties* props = zi_mem_alloc(count * sizeof(VkExtensionProperties));
+	vkEnumerateInstanceExtensionProperties(ZI_NULL, &count, props);
+
+	ZiBool ret = ZI_TRUE;
+
+	for (u32 i = 0; i < required_count; ++i) {
+		ZiBool found = ZI_FALSE;
+		for (u32 j = 0; j < count; ++j) {
+			if (strcmp(required_extensions[i], props[j].extensionName) == 0) {
+				found = ZI_TRUE;
+				break;
+			}
+		}
+
+		if (found == ZI_FALSE) {
+			ret = ZI_FALSE;
 			break;
 		}
 	}
