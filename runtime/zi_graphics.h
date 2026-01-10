@@ -630,8 +630,7 @@ typedef struct ZiRenderDevice {
 	void                    (*cmd_end_debug_label)(ZiCommandBufferHandle cmd);
 } ZiRenderDevice;
 
-void										zi_graphics_init(ZiGraphicsBackend backend);
-void										zi_graphics_terminate();
+
 void										zi_get_device_limits(ZiDeviceLimits* limits);
 
 // Buffer

@@ -1,9 +1,13 @@
 add_executable(zi-runner zi_entry_point.c)
 
 target_link_libraries(zi-runner PRIVATE
-				zi-runtime
+		zi-runtime
 )
 
-if(EMSCRIPTEN)
+if (EMSCRIPTEN)
 	set_target_properties(zi-runner PROPERTIES SUFFIX ".html")
-endif()
+endif ()
+
+IF (WIN32)
+	set_target_properties(zi-runner PROPERTIES WIN32_EXECUTABLE TRUE)
+endif ()

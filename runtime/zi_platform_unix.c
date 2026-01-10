@@ -36,4 +36,10 @@ ZiGraphicsBackend zi_platform_get_graphics_backend(ZiGraphicsBackend backend) {
 #endif
 }
 
+i32 zi_platform_run(int argc, char** argv);
+//TODO: this will work only on desktops, iOS and Android will need a different startup code
+int main(int argc, char** argv) {
+	return zi_platform_run(argc, argv);
+}
+
 #endif

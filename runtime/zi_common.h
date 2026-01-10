@@ -19,6 +19,9 @@ typedef const void* ConstPtr;
 typedef char*       CharPtr;
 typedef const char* ConstChr;
 
+#define ZI_FALSE 0
+#define ZI_TRUE 1
+
 #if defined(_WIN64)
 #define ZI_WIN 1
 #define ZI_API __declspec(dllexport)
