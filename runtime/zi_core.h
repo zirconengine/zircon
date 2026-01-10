@@ -17,6 +17,16 @@ typedef struct ZiAllocator {
 
 ZI_API ZiAllocator* zi_get_default_allocator(void);
 
+static inline VoidPtr zi_mem_alloc(u64 size) {
+	ZiAllocator* alloc = zi_get_default_allocator();
+	return alloc->alloc(size, alloc->user_data);
+}
+
+static inline void zi_mem_free(VoidPtr ptr) {
+	ZiAllocator* alloc = zi_get_default_allocator();
+	alloc->free(ptr, alloc->user_data);
+}
+
 // ============================================================================
 // Hashmap
 // ============================================================================
@@ -295,3 +305,4 @@ static inline type* name##_last(name* arr) {                                   \
     return arr->count > 0 ? &arr->data[arr->count - 1] : 0;                    \
 }
 
+ZI_ARRAY(ConstStrArray, const char*);

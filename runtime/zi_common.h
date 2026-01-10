@@ -22,6 +22,10 @@ typedef const char* ConstChr;
 #define ZI_FALSE 0
 #define ZI_TRUE 1
 
+typedef u8 ZiBool;
+
+#define ZI_NULL 0
+
 #if defined(_WIN64)
 #define ZI_WIN 1
 #define ZI_API __declspec(dllexport)

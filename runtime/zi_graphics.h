@@ -499,11 +499,9 @@ enum ZiPresentMode_ {
 typedef u32 ZiPresentMode;
 
 typedef struct ZiSwapchainDesc {
-	VoidPtr       window_handle;
-	u32           width;
-	u32           height;
-	ZiFormat      format;
-	ZiPresentMode present_mode;
+	VoidPtr  window_handle;
+	ZiFormat format;
+	u8       vsync;
 } ZiSwapchainDesc;
 
 typedef struct ZiDeviceLimits {
