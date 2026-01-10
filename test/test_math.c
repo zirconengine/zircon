@@ -1,12 +1,6 @@
 #include "unity.h"
 #include "zi_math.h"
 
-void setUp(void) {
-}
-
-void tearDown(void) {
-}
-
 // ============================================================================
 // Utility Functions Tests
 // ============================================================================
@@ -150,12 +144,10 @@ void test_zi_vec2_normalize_zero(void) {
 }
 
 // ============================================================================
-// Main
+// Test Runner
 // ============================================================================
 
-int main(void) {
-    UNITY_BEGIN();
-
+void run_math_tests(void) {
     // Utility functions
     RUN_TEST(test_zi_min_f32);
     RUN_TEST(test_zi_max_f32);
@@ -182,6 +174,4 @@ int main(void) {
     RUN_TEST(test_zi_vec2_length);
     RUN_TEST(test_zi_vec2_normalize);
     RUN_TEST(test_zi_vec2_normalize_zero);
-
-    return UNITY_END();
 }

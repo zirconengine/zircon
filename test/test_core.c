@@ -105,14 +105,11 @@ typedef struct TestStruct {
 ZI_ARRAY(StructArray, TestStruct);
 
 // ============================================================================
-// Unity Setup/Teardown
+// Core Test Setup/Teardown
 // ============================================================================
 
-void setUp(void) {
+static void core_test_setup(void) {
     reset_alloc_stats();
-}
-
-void tearDown(void) {
 }
 
 // ============================================================================
@@ -622,51 +619,73 @@ void test_structarray_basic(void) {
 }
 
 // ============================================================================
-// Main
+// Test Runner
 // ============================================================================
 
-int main(void) {
-    UNITY_BEGIN();
-
+void run_core_tests(void) {
     // Allocator tests
+    core_test_setup();
     RUN_TEST(test_default_allocator_exists);
+    core_test_setup();
     RUN_TEST(test_default_allocator_alloc_free);
+    core_test_setup();
     RUN_TEST(test_custom_allocator_tracking);
 
     // IntMap (i32 -> i32) tests
+    core_test_setup();
     RUN_TEST(test_intmap_init_free);
+    core_test_setup();
     RUN_TEST(test_intmap_set_get);
+    core_test_setup();
     RUN_TEST(test_intmap_overwrite);
+    core_test_setup();
     RUN_TEST(test_intmap_has);
+    core_test_setup();
     RUN_TEST(test_intmap_remove);
+    core_test_setup();
     RUN_TEST(test_intmap_clear);
+    core_test_setup();
     RUN_TEST(test_intmap_resize);
 
     // U64Map (u64 -> f32) tests
+    core_test_setup();
     RUN_TEST(test_u64map_basic);
 
     // StringMap (ConstChr -> i32) tests
+    core_test_setup();
     RUN_TEST(test_stringmap_basic);
+    core_test_setup();
     RUN_TEST(test_stringmap_collision_handling);
 
     // IntArray tests
+    core_test_setup();
     RUN_TEST(test_intarray_init_free);
+    core_test_setup();
     RUN_TEST(test_intarray_init_capacity);
+    core_test_setup();
     RUN_TEST(test_intarray_push_pop);
+    core_test_setup();
     RUN_TEST(test_intarray_get_set);
+    core_test_setup();
     RUN_TEST(test_intarray_first_last);
+    core_test_setup();
     RUN_TEST(test_intarray_insert);
+    core_test_setup();
     RUN_TEST(test_intarray_remove);
+    core_test_setup();
     RUN_TEST(test_intarray_remove_swap);
+    core_test_setup();
     RUN_TEST(test_intarray_clear);
+    core_test_setup();
     RUN_TEST(test_intarray_reserve);
+    core_test_setup();
     RUN_TEST(test_intarray_grow);
 
     // F32Array tests
+    core_test_setup();
     RUN_TEST(test_f32array_basic);
 
     // StructArray tests
+    core_test_setup();
     RUN_TEST(test_structarray_basic);
-
-    return UNITY_END();
 }
