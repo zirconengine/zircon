@@ -71,6 +71,11 @@ static ZiVulkanAdapter*         selected_adapter = ZI_NULL;
 static VkDevice                 device = ZI_NULL;
 static VmaAllocator             vma_allocator = ZI_NULL;
 static VkDescriptorPool         descriptor_pool;
+static VkFence                  in_flight_fences[ZI_FRAMES_IN_FLIGHT];
+
+//global command buffers;
+static VkCommandPool   command_pool;
+static VkCommandBuffer command_buffers[ZI_FRAMES_IN_FLIGHT];
 
 static VkQueue graphics_queue = ZI_NULL;
 static VkQueue present_queue = ZI_NULL;
@@ -393,39 +398,28 @@ static void zi_vulkan_init() {
 	pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 	vkCreateDescriptorPool(device, &pool_info, ZI_NULL, &descriptor_pool);
 
-	// VkSemaphoreCreateInfo semaphoreInfo{};
-	// semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	//
-	// VkFenceCreateInfo fenceInfo{};
-	// fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	// fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	//
-	// for (int i = 0; i < SK_FRAMES_IN_FLIGHT; ++i) {
-	// 	if (vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
-	// 		logger.Error("Failed to create frame objects");
-	// 		return false;
-	// 	}
-	// }
-	//
-	// VkCommandPoolCreateInfo commandPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
-	// commandPoolInfo.queueFamilyIndex = selectedAdapter->graphicsFamily;
-	// commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-	// vkCreateCommandPool(device, &commandPoolInfo, nullptr, &commandPool);
-	//
-	// for (int i = 0; i < SK_FRAMES_IN_FLIGHT; ++i) {
-	// 	VulkanCommandBuffer* vulkanCommandBuffer = Alloc<VulkanCommandBuffer>();
-	// 	vulkanCommandBuffer->vulkanDevice = this;
-	// 	vulkanCommandBuffer->commandPool = nullptr;
-	//
-	// 	VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
-	// 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	// 	allocInfo.commandPool = commandPool;
-	// 	allocInfo.commandBufferCount = 1;
-	//
-	// 	vkAllocateCommandBuffers(device, &allocInfo, &vulkanCommandBuffer->commandBuffer);
-	//
-	// 	commandBuffers[i] = vulkanCommandBuffer;
-	// }
+	VkFenceCreateInfo fenceInfo = {0};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	for (int i = 0; i < ZI_FRAMES_IN_FLIGHT; ++i) {
+		vkCreateFence(device, &fenceInfo, ZI_NULL, &in_flight_fences[i]);
+	}
+
+	VkCommandPoolCreateInfo command_pool_info = {0};
+	command_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	command_pool_info.queueFamilyIndex = selected_adapter->graphics_family;
+	command_pool_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	vkCreateCommandPool(device, &command_pool_info, ZI_NULL, &command_pool);
+
+	for (int i = 0; i < ZI_FRAMES_IN_FLIGHT; ++i) {
+		VkCommandBufferAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		alloc_info.commandPool = command_pool;
+		alloc_info.commandBufferCount = 1;
+		vkAllocateCommandBuffers(device, &alloc_info, &command_buffers[i]);
+	}
 
 	zi_log_info("Vulkan API %i.%i.%i Device: %s ",
 	            VK_VERSION_MAJOR(selected_adapter->device_properties.properties.apiVersion),
@@ -436,6 +430,12 @@ static void zi_vulkan_init() {
 
 static void zi_vulkan_terminate() {
 	zi_mem_free(adapters);
+
+	vkDestroyCommandPool(device, command_pool, ZI_NULL);
+
+	for (u32 i = 0; i < ZI_FRAMES_IN_FLIGHT; ++i) {
+		vkDestroyFence(device, in_flight_fences[i], ZI_NULL);
+	}
 
 	vkDestroyDescriptorPool(device, descriptor_pool, ZI_NULL);
 

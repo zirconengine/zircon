@@ -26,6 +26,8 @@ typedef u8 ZiBool;
 
 #define ZI_NULL 0
 
+#define ZI_FRAMES_IN_FLIGHT 2
+
 #if defined(_WIN64)
 #define ZI_WIN 1
 #define ZI_API __declspec(dllexport)
