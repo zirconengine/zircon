@@ -7,6 +7,7 @@ ZI_HANDLER(ZiTextureHandle);
 ZI_HANDLER(ZiTextureViewHandle);
 ZI_HANDLER(ZiSamplerHandle);
 ZI_HANDLER(ZiRenderPassHandle);
+ZI_HANDLER(ZiFramebufferHandle);
 ZI_HANDLER(ZiCommandBufferHandle);
 ZI_HANDLER(ZiSwapchainHandle);
 ZI_HANDLER(ZiPipelineLayoutHandle);
@@ -431,26 +432,46 @@ enum ZiStoreOp_ {
 
 typedef u32 ZiStoreOp;
 
-typedef struct ZiColorAttachment {
-	ZiTextureHandle texture;
-	ZiLoadOp        load_op;
-	ZiStoreOp       store_op;
-	f32             clear_color[4];
-} ZiColorAttachment;
+typedef struct ZiColorAttachmentDesc {
+	ZiFormat  format;
+	ZiLoadOp  load_op;
+	ZiStoreOp store_op;
+	u32       sample_count;
+} ZiColorAttachmentDesc;
 
-typedef struct ZiDepthAttachment {
-	ZiTextureHandle texture;
-	ZiLoadOp        load_op;
-	ZiStoreOp       store_op;
-	f32             clear_depth;
-	u8              clear_stencil;
-} ZiDepthAttachment;
+typedef struct ZiDepthAttachmentDesc {
+	ZiFormat  format;
+	ZiLoadOp  depth_load_op;
+	ZiStoreOp depth_store_op;
+	ZiLoadOp  stencil_load_op;
+	ZiStoreOp stencil_store_op;
+	u32       sample_count;
+} ZiDepthAttachmentDesc;
 
 typedef struct ZiRenderPassDesc {
-	ZiColorAttachment* color_attachments;
-	u32                color_attachment_count;
-	ZiDepthAttachment* depth_attachment;
+	ZiColorAttachmentDesc* color_attachments;
+	u32                    color_attachment_count;
+	ZiDepthAttachmentDesc* depth_attachment;
 } ZiRenderPassDesc;
+
+typedef struct ZiFramebufferDesc {
+	ZiRenderPassHandle   render_pass;
+	ZiTextureViewHandle* color_attachments;
+	u32                  color_attachment_count;
+	ZiTextureViewHandle* depth_attachment;
+	u32                  width;
+	u32                  height;
+	u32                  layers;
+} ZiFramebufferDesc;
+
+typedef struct ZiRenderPassBeginDesc {
+	ZiRenderPassHandle  render_pass;
+	ZiFramebufferHandle framebuffer;
+	f32*                clear_colors;
+	u32                 clear_color_count;
+	f32                 clear_depth;
+	u8                  clear_stencil;
+} ZiRenderPassBeginDesc;
 
 enum ZiBindingType_ {
 	ZiBindingType_UniformBuffer = 0,
@@ -586,6 +607,10 @@ typedef struct ZiRenderDevice {
 	ZiRenderPassHandle      (*render_pass_create)(const ZiRenderPassDesc* desc);
 	void                    (*render_pass_destroy)(ZiRenderPassHandle handle);
 
+	// Framebuffer
+	ZiFramebufferHandle     (*framebuffer_create)(const ZiFramebufferDesc* desc);
+	void                    (*framebuffer_destroy)(ZiFramebufferHandle handle);
+
 	// Command Buffer
 	ZiCommandBufferHandle   (*command_buffer_create)();
 	void                    (*command_buffer_destroy)(ZiCommandBufferHandle handle);
@@ -594,7 +619,7 @@ typedef struct ZiRenderDevice {
 	void                    (*command_buffer_submit)(ZiCommandBufferHandle handle);
 
 	// Command Buffer - Render Pass
-	void                    (*cmd_begin_render_pass)(ZiCommandBufferHandle cmd, const ZiRenderPassDesc* desc);
+	void                    (*cmd_begin_render_pass)(ZiCommandBufferHandle cmd, const ZiRenderPassBeginDesc* desc);
 	void                    (*cmd_end_render_pass)(ZiCommandBufferHandle cmd);
 
 	// Command Buffer - State
@@ -688,6 +713,10 @@ void                    zi_bind_group_destroy(ZiBindGroupHandle handle);
 ZiRenderPassHandle      zi_render_pass_create(const ZiRenderPassDesc* desc);
 void                    zi_render_pass_destroy(ZiRenderPassHandle handle);
 
+// Framebuffer
+ZiFramebufferHandle     zi_framebuffer_create(const ZiFramebufferDesc* desc);
+void                    zi_framebuffer_destroy(ZiFramebufferHandle handle);
+
 // Command Buffer
 ZiCommandBufferHandle   zi_command_buffer_create();
 void                    zi_command_buffer_destroy(ZiCommandBufferHandle handle);
@@ -696,7 +725,7 @@ void                    zi_command_buffer_end(ZiCommandBufferHandle handle);
 void                    zi_command_buffer_submit(ZiCommandBufferHandle handle);
 
 // Command Buffer - Render Pass
-void                    zi_cmd_begin_render_pass(ZiCommandBufferHandle cmd, const ZiRenderPassDesc* desc);
+void                    zi_cmd_begin_render_pass(ZiCommandBufferHandle cmd, const ZiRenderPassBeginDesc* desc);
 void                    zi_cmd_end_render_pass(ZiCommandBufferHandle cmd);
 
 // Command Buffer - State

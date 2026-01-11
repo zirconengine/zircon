@@ -83,6 +83,10 @@ void zi_bind_group_destroy(ZiBindGroupHandle handle) { device.bind_group_destroy
 ZiRenderPassHandle zi_render_pass_create(const ZiRenderPassDesc* desc) { return device.render_pass_create(desc); }
 void zi_render_pass_destroy(ZiRenderPassHandle handle) { device.render_pass_destroy(handle); }
 
+// Framebuffer
+ZiFramebufferHandle zi_framebuffer_create(const ZiFramebufferDesc* desc) { return device.framebuffer_create(desc); }
+void zi_framebuffer_destroy(ZiFramebufferHandle handle) { device.framebuffer_destroy(handle); }
+
 // Command Buffer
 ZiCommandBufferHandle zi_command_buffer_create() { return device.command_buffer_create(); }
 void zi_command_buffer_destroy(ZiCommandBufferHandle handle) { device.command_buffer_destroy(handle); }
@@ -91,7 +95,7 @@ void zi_command_buffer_end(ZiCommandBufferHandle handle) { device.command_buffer
 void zi_command_buffer_submit(ZiCommandBufferHandle handle) { device.command_buffer_submit(handle); }
 
 // Command Buffer - Render Pass
-void zi_cmd_begin_render_pass(ZiCommandBufferHandle cmd, const ZiRenderPassDesc* desc) { device.cmd_begin_render_pass(cmd, desc); }
+void zi_cmd_begin_render_pass(ZiCommandBufferHandle cmd, const ZiRenderPassBeginDesc* desc) { device.cmd_begin_render_pass(cmd, desc); }
 void zi_cmd_end_render_pass(ZiCommandBufferHandle cmd) { device.cmd_end_render_pass(cmd); }
 
 // Command Buffer - State

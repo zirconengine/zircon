@@ -94,6 +94,8 @@ ZiBool zi_get_physical_device_presentation_support(VkInstance instance, VkPhysic
 	return glfwGetPhysicalDevicePresentationSupport(instance, device, queue_family);
 }
 
+void zi_platform_create_surface(VkInstance instance, VoidPtr window_handle, VkSurfaceKHR* surface) {
+	glfwCreateWindowSurface(instance, window_handle, ZI_NULL, surface);
+}
 #endif
-
 #endif
