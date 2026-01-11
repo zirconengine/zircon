@@ -524,6 +524,16 @@ typedef struct ZiDeviceLimits {
 	u32 max_push_constant_size;
 } ZiDeviceLimits;
 
+typedef struct ZiDeviceFeatures {
+	ZiBool bindless_texture_supported;
+	ZiBool bindless_sampler_supported;
+	ZiBool bindless_buffer_supported;
+	ZiBool multiview_enabled;
+	ZiBool draw_indirect_count;
+	ZiBool ray_tracing;
+	ZiBool resolve_depth;
+} ZiDeviceFeatures;
+
 typedef struct ZiRenderDevice {
 	void (*init)();
 	void (*terminate)();

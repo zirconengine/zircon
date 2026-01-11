@@ -10,24 +10,67 @@
 #include "vulkan/vk_enum_string_helper.h"
 
 
-void zi_platform_set_vulkan_loader(const PFN_vkGetInstanceProcAddr p_vulkan_loader);
+typedef struct ZiVulkanAdapter {
+	VkPhysicalDevice device;
+	u32              score;
+	u32              graphics_family;
+	u32              present_family;
+
+	VkPhysicalDeviceProperties2                      device_properties;
+	VkPhysicalDeviceRayQueryFeaturesKHR              device_ray_query_features_khr;
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR device_acceleration_structure_features_khr;
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR    device_ray_tracing_pipeline_features;
+	VkPhysicalDeviceBufferDeviceAddressFeatures      buffer_device_address_features;
+	VkPhysicalDeviceShaderDrawParametersFeatures     draw_parameters_features;
+	VkPhysicalDeviceDescriptorIndexingFeatures       indexing_features;
+	VkPhysicalDeviceMaintenance4FeaturesKHR          maintenance4_features;
+	VkPhysicalDeviceMultiviewFeatures                multiview_features;
+	VkPhysicalDeviceFeatures2                        device_features;
+} ZiVulkanAdapter;
+
+typedef struct ZiVulkanBaseInStructure {
+	VkStructureType sType;
+	VoidPtr         pNext;
+} ZiVulkanBaseInStructure;
+
+typedef struct ZiVulkanExtension {
+	const char**           added_extensions;
+	u32                    add_extension_count;
+	VkExtensionProperties* available_extensions;
+	u32                    available_extension_count;
+} ZiVulkanExtension;
+
+
+void         zi_platform_set_vulkan_loader(const PFN_vkGetInstanceProcAddr p_vulkan_loader);
 const char** zi_platform_get_required_extensions(u32* count);
+ZiBool       zi_get_physical_device_presentation_support(VkInstance instance, VkPhysicalDevice device, uint32_t queue_family);
+
 static VkBool32 vulkan_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
-																			VkDebugUtilsMessageTypeFlagsEXT             messageType,
-																			const VkDebugUtilsMessengerCallbackDataEXT* callbackDataExt,
-																			void*                                       userData);
+                                      VkDebugUtilsMessageTypeFlagsEXT             messageType,
+                                      const VkDebugUtilsMessengerCallbackDataEXT* callbackDataExt,
+                                      void*                                       userData);
 static ZiBool vulkan_query_layer_property(const char* layer);
 static ZiBool vulkan_query_instance_extension(const char* required_extensions);
 static ZiBool vulkan_query_instance_extensions(const char** required_extensions, u32 required_count);
+static void   vulkan_check_physical_device(ZiVulkanAdapter* adapter);
+static ZiBool vulkan_add_if_present(ZiVulkanExtension* extensions, const char* extension, VoidPtr feature);
+static void   vulkan_add_to_chain(VkPhysicalDeviceFeatures2* features, VoidPtr feature);
 
 
 static const char* validation_layer = "VK_LAYER_KHRONOS_validation";
 
-static ZiBool      validation_layers_enabled = ZI_FALSE;
-static ZiBool			 debug_utils_enabled = ZI_FALSE;
+static ZiBool validation_layers_enabled = ZI_FALSE;
+static ZiBool debug_utils_enabled = ZI_FALSE;
 
 static VkInstance               instance = NULL;
 static VkDebugUtilsMessengerEXT debug_utils_messenger_ext;
+static ZiVulkanAdapter*         selected_adapter;
+static VkDevice                 device = NULL;
+
+static ZiDeviceFeatures features;
+
+static ZiVulkanAdapter* adapters;
+static u32              adapters_count;
 
 static void zi_vulkan_init() {
 	ZiBool enable_debug_layers = ZI_TRUE;
@@ -46,9 +89,9 @@ static void zi_vulkan_init() {
 	applicationInfo.engineVersion = 0;
 	applicationInfo.apiVersion = VK_API_VERSION_1_3;
 
-	VkInstanceCreateInfo createInfo = {0};
-	createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	createInfo.pApplicationInfo = &applicationInfo;
+	VkInstanceCreateInfo instance_create_info = {0};
+	instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+	instance_create_info.pApplicationInfo = &applicationInfo;
 
 	validation_layers_enabled = enable_debug_layers && vulkan_query_layer_property(validation_layer);
 
@@ -65,17 +108,19 @@ static void zi_vulkan_init() {
 
 		debug_utils_messenger_create_info.pfnUserCallback = &vulkan_debug_callback;
 
-		createInfo.enabledLayerCount = 1;
-		createInfo.ppEnabledLayerNames = &validation_layer;
-		createInfo.pNext = &debug_utils_messenger_create_info;
-	} else {
-		createInfo.enabledLayerCount = 0;
+		instance_create_info.enabledLayerCount = 1;
+		instance_create_info.ppEnabledLayerNames = &validation_layer;
+		instance_create_info.pNext = &debug_utils_messenger_create_info;
+	}
+	else {
+		instance_create_info.enabledLayerCount = 0;
 	}
 
 	ConstStrArray required_extensions = {};
 	ConstStrArray_init(&required_extensions, 0);
 
 	u32 count;
+
 	const char** platform_extensions = zi_platform_get_required_extensions(&count);
 	for (u32 i = 0; i < count; ++i) {
 		ConstStrArray_push(&required_extensions, platform_extensions[i]);
@@ -90,14 +135,16 @@ static void zi_vulkan_init() {
 #if ZI_APPLE
 	if (vulkan_query_instance_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)) {
 		ConstStrArray_push(&required_extensions, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-		createInfo.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
+		instance_create_info.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
 	}
 #endif
 
-	createInfo.enabledExtensionCount = (u32)required_extensions.count;
-	createInfo.ppEnabledExtensionNames = required_extensions.data;
+	instance_create_info.enabledExtensionCount = (u32)required_extensions.count;
+	instance_create_info.ppEnabledExtensionNames = required_extensions.data;
 
-	VkResult res = vkCreateInstance(&createInfo, NULL, &instance);
+	VkResult res = vkCreateInstance(&instance_create_info, NULL, &instance);
+
+	ConstStrArray_free(&required_extensions);
 
 	if (res != VK_SUCCESS) {
 		zi_log_error("Error on create vkCreateInstance %s", string_VkResult(res));
@@ -109,12 +156,208 @@ static void zi_vulkan_init() {
 		vkCreateDebugUtilsMessengerEXT(instance, &debug_utils_messenger_create_info, ZI_NULL, &debug_utils_messenger_ext);
 	}
 
-	zi_log_debug("vulkan initialized successfully");
 
-	ConstStrArray_free(&required_extensions);
+	vkEnumeratePhysicalDevices(instance, &adapters_count, NULL);
+	VkPhysicalDevice* devices = zi_mem_alloc(sizeof(VkPhysicalDevice) * adapters_count);
+	vkEnumeratePhysicalDevices(instance, &adapters_count, devices);
+	adapters = zi_mem_alloc(sizeof(ZiVulkanAdapter) * adapters_count);
+
+	for (u32 i = 0; i < adapters_count; ++i) {
+		ZiVulkanAdapter* adapter = &adapters[i];
+		memset(adapter, 0, sizeof(ZiVulkanAdapter));
+		adapter->device = devices[i];
+		vulkan_check_physical_device(adapter);
+	}
+
+	zi_mem_free(devices);
+
+	selected_adapter = 0;
+	u32 score = 0;
+	for (u32 i = 0; i < adapters_count; ++i) {
+		if (adapters[i].score > score) {
+			score = adapters[i].score;
+			selected_adapter = &adapters[i];
+		}
+	}
+
+	if (selected_adapter == ZI_NULL) {
+		zi_log_debug("no device found for vulkan");
+		return;
+	}
+
+	VkPhysicalDeviceFeatures2 device_features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+
+	ZiVulkanExtension extensions;
+	memset(&extensions, 0, sizeof(ZiVulkanExtension));
+
+	vkEnumerateDeviceExtensionProperties(selected_adapter->device, ZI_NULL, &extensions.available_extension_count, ZI_NULL);
+
+	extensions.available_extensions = zi_mem_alloc(extensions.available_extension_count * sizeof(VkExtensionProperties));
+	extensions.added_extensions = zi_mem_alloc(extensions.available_extension_count * sizeof(char*));
+
+	vkEnumerateDeviceExtensionProperties(selected_adapter->device, ZI_NULL, &extensions.available_extension_count, extensions.available_extensions);
+
+	device_features.features.samplerAnisotropy = selected_adapter->device_features.features.samplerAnisotropy;
+	device_features.features.sampleRateShading = selected_adapter->device_features.features.sampleRateShading;
+	device_features.features.depthClamp = ZI_TRUE;
+
+	VkPhysicalDeviceMaintenance4Features maintenance4Features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR};
+	maintenance4Features.maintenance4 = ZI_TRUE;
+
+	VkPhysicalDeviceDescriptorIndexingFeatures indexing_features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};
+	indexing_features.descriptorBindingPartiallyBound = selected_adapter->indexing_features.descriptorBindingPartiallyBound;
+	indexing_features.runtimeDescriptorArray = selected_adapter->indexing_features.runtimeDescriptorArray;
+	indexing_features.shaderSampledImageArrayNonUniformIndexing = selected_adapter->indexing_features.shaderSampledImageArrayNonUniformIndexing;
+	indexing_features.shaderStorageBufferArrayNonUniformIndexing = selected_adapter->indexing_features.shaderStorageBufferArrayNonUniformIndexing;
+	indexing_features.shaderUniformBufferArrayNonUniformIndexing = selected_adapter->indexing_features.shaderUniformBufferArrayNonUniformIndexing;
+	indexing_features.descriptorBindingSampledImageUpdateAfterBind = selected_adapter->indexing_features.descriptorBindingSampledImageUpdateAfterBind;
+	indexing_features.descriptorBindingStorageImageUpdateAfterBind = selected_adapter->indexing_features.descriptorBindingStorageImageUpdateAfterBind;
+	indexing_features.descriptorBindingStorageBufferUpdateAfterBind = selected_adapter->indexing_features.descriptorBindingSampledImageUpdateAfterBind;
+	indexing_features.descriptorBindingUniformBufferUpdateAfterBind = selected_adapter->indexing_features.descriptorBindingUniformBufferUpdateAfterBind;
+
+	features.bindless_texture_supported = indexing_features.shaderSampledImageArrayNonUniformIndexing &&
+		indexing_features.descriptorBindingPartiallyBound &&
+		indexing_features.runtimeDescriptorArray &&
+		indexing_features.descriptorBindingSampledImageUpdateAfterBind &&
+		indexing_features.descriptorBindingStorageImageUpdateAfterBind;
+
+	features.bindless_buffer_supported = indexing_features.shaderStorageBufferArrayNonUniformIndexing &&
+		indexing_features.descriptorBindingPartiallyBound &&
+		indexing_features.runtimeDescriptorArray &&
+		indexing_features.descriptorBindingStorageBufferUpdateAfterBind &&
+		indexing_features.descriptorBindingStorageImageUpdateAfterBind &&
+		indexing_features.descriptorBindingUniformBufferUpdateAfterBind;
+
+
+	features.multiview_enabled = selected_adapter->multiview_features.multiview;
+
+	VkPhysicalDeviceRayQueryFeaturesKHR deviceRayQueryFeaturesKhr = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR, ZI_NULL};
+	deviceRayQueryFeaturesKhr.rayQuery = ZI_TRUE;
+
+	VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelerationStructureFeaturesKhr = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, ZI_NULL};
+	deviceAccelerationStructureFeaturesKhr.accelerationStructure = ZI_TRUE;
+
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRayTracingPipelineFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR , ZI_NULL};
+	deviceRayTracingPipelineFeatures.rayTracingPipeline = ZI_TRUE;
+
+	VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES , ZI_NULL};
+	bufferDeviceAddressFeatures.bufferDeviceAddress = ZI_TRUE;
+
+	VkPhysicalDeviceShaderDrawParametersFeatures drawParametersFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES , ZI_NULL};
+	drawParametersFeatures.shaderDrawParameters = selected_adapter->draw_parameters_features.shaderDrawParameters;
+
+	VkPhysicalDeviceMultiviewFeatures multiviewFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES, ZI_NULL};
+	multiviewFeatures.multiview = ZI_TRUE;
+
+	if (!vulkan_add_if_present(&extensions, VK_KHR_SWAPCHAIN_EXTENSION_NAME, 0)) {
+		return;
+	}
+
+	if (!vulkan_add_if_present(&extensions, VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME, 0)) {
+		return;
+	}
+
+	features.resolve_depth = vulkan_add_if_present(&extensions, VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, 0);
+
+	vulkan_add_if_present(&extensions, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_MAINTENANCE_4_EXTENSION_NAME, &maintenance4Features);
+
+	vulkan_add_if_present(&extensions, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, &bufferDeviceAddressFeatures);
+	features.draw_indirect_count = vulkan_add_if_present(&extensions, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME, 0);
+
+	features.ray_tracing = vulkan_add_if_present(&extensions, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 0) &&
+		vulkan_add_if_present(&extensions, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, 0);
+
+	vulkan_add_if_present(&extensions, VK_KHR_RAY_QUERY_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_SPIRV_1_4_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME, 0);
+	vulkan_add_if_present(&extensions, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, 0);
+
+	if (features.bindless_texture_supported) {
+		vulkan_add_to_chain(&device_features, &indexing_features);
+	}
+
+	if (features.ray_tracing) {
+		vulkan_add_to_chain(&device_features, &deviceRayQueryFeaturesKhr);
+		vulkan_add_to_chain(&device_features, &deviceAccelerationStructureFeaturesKhr);
+		vulkan_add_to_chain(&device_features, &deviceRayTracingPipelineFeatures);
+	}
+
+	if (features.multiview_enabled) {
+		vulkan_add_to_chain(&device_features, &multiviewFeatures);
+	}
+
+	if (drawParametersFeatures.shaderDrawParameters) {
+		vulkan_add_to_chain(&device_features, &drawParametersFeatures);
+	}
+
+#ifdef SK_APPLE
+	vulkan_add_if_present(&extensions, VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME, 0);
+#endif
+
+	float queue_priority = 1.0f;
+
+	u32 queue_create_info_count = 0;
+	VkDeviceQueueCreateInfo queue_create_info[2];
+	memset(&queue_create_info, 0, sizeof(VkDeviceQueueCreateInfo) * 2);
+
+	if (selected_adapter->graphics_family != selected_adapter->present_family) {
+		queue_create_info_count = 2;
+
+		queue_create_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info[0].queueFamilyIndex = selected_adapter->graphics_family;
+		queue_create_info[0].queueCount = 1;
+		queue_create_info[0].pQueuePriorities = &queue_priority;
+
+		queue_create_info[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info[1].queueFamilyIndex = selected_adapter->present_family;
+		queue_create_info[1].queueCount = 1;
+		queue_create_info[1].pQueuePriorities = &queue_priority;
+	}
+	else {
+		queue_create_info_count = 1;
+		queue_create_info[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info[0].queueFamilyIndex = selected_adapter->graphics_family;
+		queue_create_info[0].queueCount = 1;
+		queue_create_info[0].pQueuePriorities = &queue_priority;
+	}
+
+	if (selected_adapter->device_features.features.fillModeNonSolid) {
+		device_features.features.fillModeNonSolid = VK_TRUE;
+	}
+
+	if (selected_adapter->device_features.features.wideLines) {
+		device_features.features.wideLines = VK_TRUE;
+	}
+
+	VkDeviceCreateInfo device_create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO, 0};
+	device_create_info.pNext = &device_features;
+	device_create_info.pQueueCreateInfos = queue_create_info;
+	device_create_info.queueCreateInfoCount = queue_create_info_count;
+	device_create_info.enabledExtensionCount = extensions.add_extension_count;
+	device_create_info.ppEnabledExtensionNames = extensions.added_extensions;
+
+	res = vkCreateDevice(selected_adapter->device, &device_create_info, ZI_NULL, &device);
+	if (res != VK_SUCCESS) {
+		zi_log_error("Failed to create logical device for device %s, error %s",
+		             selected_adapter->device_properties.properties.deviceName, string_VkResult(res));
+		return;
+	}
+
+	zi_mem_free(extensions.available_extensions);
+	zi_mem_free(extensions.added_extensions);
+
+	zi_log_info("Vulkan API %i.%i.%i Device: %s ",
+						VK_VERSION_MAJOR(selected_adapter->device_properties.properties.apiVersion),
+						VK_VERSION_MINOR(selected_adapter->device_properties.properties.apiVersion),
+						VK_VERSION_PATCH(selected_adapter->device_properties.properties.apiVersion),
+						selected_adapter->device_properties.properties.deviceName);
 }
 
 static void zi_vulkan_terminate() {
+	zi_mem_free(adapters);
 
 	if (validation_layers_enabled) {
 		vkDestroyDebugUtilsMessengerEXT(instance, debug_utils_messenger_ext, ZI_NULL);
@@ -372,6 +615,134 @@ static ZiBool vulkan_query_instance_extensions(const char** required_extensions,
 	zi_mem_free(props);
 
 	return ret;
+}
+
+static void vulkan_check_physical_device(ZiVulkanAdapter* adapter) {
+	adapter->graphics_family = U32_MAX;
+	adapter->present_family = U32_MAX;
+
+	adapter->device_properties.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2;
+	adapter->device_ray_query_features_khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR;
+
+	adapter->device_acceleration_structure_features_khr.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+	adapter->device_acceleration_structure_features_khr.pNext = &adapter->device_ray_query_features_khr;
+
+	adapter->device_ray_tracing_pipeline_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR;
+	adapter->device_ray_tracing_pipeline_features.pNext = &adapter->device_acceleration_structure_features_khr;
+
+	adapter->buffer_device_address_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES;
+	adapter->buffer_device_address_features.pNext = &adapter->device_ray_tracing_pipeline_features;
+
+	adapter->draw_parameters_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES;
+	adapter->draw_parameters_features.pNext = &adapter->buffer_device_address_features;
+
+	adapter->indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES;
+	adapter->indexing_features.pNext = &adapter->draw_parameters_features;
+
+	adapter->maintenance4_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_4_FEATURES_KHR;
+	adapter->maintenance4_features.pNext = &adapter->indexing_features;
+
+	adapter->multiview_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES;
+	adapter->multiview_features.pNext = &adapter->maintenance4_features;
+
+	adapter->device_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	adapter->device_features.pNext = &adapter->multiview_features;
+
+	vkGetPhysicalDeviceProperties2(adapter->device, &adapter->device_properties);
+	vkGetPhysicalDeviceFeatures2(adapter->device, &adapter->device_features);
+
+
+	adapter->score += adapter->device_properties.properties.limits.maxImageDimension2D / 1024;
+
+	if (adapter->device_properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+		adapter->score += 1000;
+	}
+	else if (adapter->device_properties.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU) {
+		adapter->score += 500;
+	}
+
+	u32 queue_family_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(adapter->device, &queue_family_count, NULL);
+
+	VkQueueFamilyProperties* queue_families = zi_mem_alloc(sizeof(VkQueueFamilyProperties) * queue_family_count);
+	vkGetPhysicalDeviceQueueFamilyProperties(adapter->device, &queue_family_count, queue_families);
+
+	ZiBool has_graphics_queue = ZI_FALSE;
+	ZiBool has_compute_queue = ZI_FALSE;
+	ZiBool has_transfer_queue = ZI_FALSE;
+	ZiBool has_present_queue = ZI_FALSE;
+
+	for (u32 i = 0; i < queue_family_count; ++i) {
+		VkQueueFamilyProperties* queue_family_properties = &queue_families[i];
+
+		ZiBool has_present_family = zi_get_physical_device_presentation_support(instance, adapter->device, i);
+		ZiBool has_graphics_family = queue_family_properties->queueFlags & VK_QUEUE_GRAPHICS_BIT;
+
+		if (has_graphics_family && adapter->graphics_family == U32_MAX) {
+			adapter->graphics_family = i;
+		}
+
+		if (has_present_family && adapter->present_family == U32_MAX) {
+			adapter->present_family = i;
+		}
+
+		//score device by queue
+		if (has_present_family) {
+			has_present_queue = ZI_TRUE;
+		}
+
+		if (has_graphics_family) {
+			has_graphics_queue = ZI_TRUE;
+		}
+		if (queue_family_properties->queueFlags & VK_QUEUE_COMPUTE_BIT) {
+			has_compute_queue = ZI_TRUE;
+		}
+		if (queue_family_properties->queueFlags & VK_QUEUE_TRANSFER_BIT) {
+			has_transfer_queue = ZI_TRUE;
+		}
+	}
+
+	if (has_compute_queue) {
+		adapter->score += 100;
+	}
+	if (has_transfer_queue) {
+		adapter->score += 100;
+	}
+
+	if (!has_graphics_queue || !has_present_queue) {
+		adapter->score = 0;
+	}
+
+	zi_mem_free(queue_families);
+}
+
+static ZiBool vulkan_add_if_present(ZiVulkanExtension* extensions, const char* extension, VoidPtr feature) {
+	//check for duplicates
+	for (u32 i = 0; i < extensions->add_extension_count; ++i) {
+		if (strcmp(extensions->added_extensions[i], extension) == 0) {
+			return ZI_TRUE;
+		}
+	}
+
+
+	for (u32 i = 0; i < extensions->available_extension_count; ++i) {
+		if (strcmp(extensions->available_extensions[i].extensionName, extension) == 0) {
+			extensions->added_extensions[extensions->add_extension_count] = extension;
+			extensions->add_extension_count++;
+			return ZI_TRUE;
+		}
+	}
+
+
+	return ZI_FALSE;
+}
+
+static void vulkan_add_to_chain(VkPhysicalDeviceFeatures2* device_features, VoidPtr feature) {
+	if (feature != ZI_NULL) {
+		ZiVulkanBaseInStructure* to_add = feature;
+		to_add->pNext = device_features->pNext;
+		device_features->pNext = to_add;
+	}
 }
 
 void zi_graphics_init_vulkan(ZiRenderDevice* device) {

@@ -90,6 +90,10 @@ const char** zi_platform_get_required_extensions(u32* count) {
 	return glfwGetRequiredInstanceExtensions(count);
 }
 
+ZiBool zi_get_physical_device_presentation_support(VkInstance instance, VkPhysicalDevice device, uint32_t queue_family) {
+	return glfwGetPhysicalDevicePresentationSupport(instance, device, queue_family);
+}
+
 #endif
 
 #endif
