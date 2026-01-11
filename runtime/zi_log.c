@@ -9,6 +9,11 @@
 static const char* level_desc[] = {"trace", "debug", "info", "warn", "error", "critical", "off"};
 
 void zi_log(ZiLogLevel level, const char* fmt, ...) {
+
+	if (level <= ZiLogLevel_Trace) {
+		return;
+	}
+
 	char buffer[1024];
 
 	va_list args;

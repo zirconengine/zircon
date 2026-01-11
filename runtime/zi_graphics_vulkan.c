@@ -3,9 +3,12 @@
 
 #ifdef ZI_VULKAN_ENABLED
 
+
 #include <string.h>
 
 #include "volk.h"
+
+#include "vk_mem_alloc.h"
 #include "zi_core.h"
 #include "vulkan/vk_enum_string_helper.h"
 
@@ -62,12 +65,18 @@ static const char* validation_layer = "VK_LAYER_KHRONOS_validation";
 static ZiBool validation_layers_enabled = ZI_FALSE;
 static ZiBool debug_utils_enabled = ZI_FALSE;
 
-static VkInstance               instance = NULL;
-static VkDebugUtilsMessengerEXT debug_utils_messenger_ext;
-static ZiVulkanAdapter*         selected_adapter;
-static VkDevice                 device = NULL;
+static VkInstance               instance = ZI_NULL;
+static VkDebugUtilsMessengerEXT debug_utils_messenger_ext = ZI_NULL;
+static ZiVulkanAdapter*         selected_adapter = ZI_NULL;
+static VkDevice                 device = ZI_NULL;
+static VmaAllocator             vma_allocator = ZI_NULL;
+static VkDescriptorPool         descriptor_pool;
+
+static VkQueue graphics_queue = ZI_NULL;
+static VkQueue present_queue = ZI_NULL;
 
 static ZiDeviceFeatures features;
+static ZiBool           has_buffer_device_address = ZI_FALSE;
 
 static ZiVulkanAdapter* adapters;
 static u32              adapters_count;
@@ -237,13 +246,13 @@ static void zi_vulkan_init() {
 	VkPhysicalDeviceAccelerationStructureFeaturesKHR deviceAccelerationStructureFeaturesKhr = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR, ZI_NULL};
 	deviceAccelerationStructureFeaturesKhr.accelerationStructure = ZI_TRUE;
 
-	VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRayTracingPipelineFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR , ZI_NULL};
+	VkPhysicalDeviceRayTracingPipelineFeaturesKHR deviceRayTracingPipelineFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR, ZI_NULL};
 	deviceRayTracingPipelineFeatures.rayTracingPipeline = ZI_TRUE;
 
-	VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES , ZI_NULL};
+	VkPhysicalDeviceBufferDeviceAddressFeatures bufferDeviceAddressFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES, ZI_NULL};
 	bufferDeviceAddressFeatures.bufferDeviceAddress = ZI_TRUE;
 
-	VkPhysicalDeviceShaderDrawParametersFeatures drawParametersFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES , ZI_NULL};
+	VkPhysicalDeviceShaderDrawParametersFeatures drawParametersFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES, ZI_NULL};
 	drawParametersFeatures.shaderDrawParameters = selected_adapter->draw_parameters_features.shaderDrawParameters;
 
 	VkPhysicalDeviceMultiviewFeatures multiviewFeatures = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES, ZI_NULL};
@@ -262,7 +271,7 @@ static void zi_vulkan_init() {
 	vulkan_add_if_present(&extensions, VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME, 0);
 	vulkan_add_if_present(&extensions, VK_KHR_MAINTENANCE_4_EXTENSION_NAME, &maintenance4Features);
 
-	vulkan_add_if_present(&extensions, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, &bufferDeviceAddressFeatures);
+	has_buffer_device_address = vulkan_add_if_present(&extensions, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, &bufferDeviceAddressFeatures);
 	features.draw_indirect_count = vulkan_add_if_present(&extensions, VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME, 0);
 
 	features.ray_tracing = vulkan_add_if_present(&extensions, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, 0) &&
@@ -299,9 +308,8 @@ static void zi_vulkan_init() {
 
 	float queue_priority = 1.0f;
 
-	u32 queue_create_info_count = 0;
-	VkDeviceQueueCreateInfo queue_create_info[2];
-	memset(&queue_create_info, 0, sizeof(VkDeviceQueueCreateInfo) * 2);
+	u32                     queue_create_info_count = 0;
+	VkDeviceQueueCreateInfo queue_create_info[2] = {0};
 
 	if (selected_adapter->graphics_family != selected_adapter->present_family) {
 		queue_create_info_count = 2;
@@ -349,21 +357,97 @@ static void zi_vulkan_init() {
 	zi_mem_free(extensions.available_extensions);
 	zi_mem_free(extensions.added_extensions);
 
+	vkGetDeviceQueue(device, selected_adapter->graphics_family, 0, &graphics_queue);
+	vkGetDeviceQueue(device, selected_adapter->present_family, 0, &present_queue);
+
+	VmaVulkanFunctions vma_vulkan_functions = {0};
+	vma_vulkan_functions.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+	vma_vulkan_functions.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+	VmaAllocatorCreateInfo vma_allocator_create_info = {0};
+	vma_allocator_create_info.physicalDevice = selected_adapter->device;
+	vma_allocator_create_info.device = device;
+	vma_allocator_create_info.instance = instance;
+
+	if (has_buffer_device_address) {
+		vma_allocator_create_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+	}
+
+	vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_functions;
+	vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator);
+
+	VkDescriptorPoolSize sizes[] = {
+		{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 5000},
+		{VK_DESCRIPTOR_TYPE_SAMPLER, 5000},
+		{VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 5000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 5000},
+		{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 5000},
+		{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5000}
+	};
+
+	VkDescriptorPoolCreateInfo pool_info = {0};
+	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	pool_info.poolSizeCount = 6;
+	pool_info.pPoolSizes = sizes;
+	pool_info.maxSets = 5000;
+	pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+	vkCreateDescriptorPool(device, &pool_info, ZI_NULL, &descriptor_pool);
+
+	// VkSemaphoreCreateInfo semaphoreInfo{};
+	// semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	//
+	// VkFenceCreateInfo fenceInfo{};
+	// fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	// fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	//
+	// for (int i = 0; i < SK_FRAMES_IN_FLIGHT; ++i) {
+	// 	if (vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
+	// 		logger.Error("Failed to create frame objects");
+	// 		return false;
+	// 	}
+	// }
+	//
+	// VkCommandPoolCreateInfo commandPoolInfo = {VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
+	// commandPoolInfo.queueFamilyIndex = selectedAdapter->graphicsFamily;
+	// commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+	// vkCreateCommandPool(device, &commandPoolInfo, nullptr, &commandPool);
+	//
+	// for (int i = 0; i < SK_FRAMES_IN_FLIGHT; ++i) {
+	// 	VulkanCommandBuffer* vulkanCommandBuffer = Alloc<VulkanCommandBuffer>();
+	// 	vulkanCommandBuffer->vulkanDevice = this;
+	// 	vulkanCommandBuffer->commandPool = nullptr;
+	//
+	// 	VkCommandBufferAllocateInfo allocInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
+	// 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	// 	allocInfo.commandPool = commandPool;
+	// 	allocInfo.commandBufferCount = 1;
+	//
+	// 	vkAllocateCommandBuffers(device, &allocInfo, &vulkanCommandBuffer->commandBuffer);
+	//
+	// 	commandBuffers[i] = vulkanCommandBuffer;
+	// }
+
 	zi_log_info("Vulkan API %i.%i.%i Device: %s ",
-						VK_VERSION_MAJOR(selected_adapter->device_properties.properties.apiVersion),
-						VK_VERSION_MINOR(selected_adapter->device_properties.properties.apiVersion),
-						VK_VERSION_PATCH(selected_adapter->device_properties.properties.apiVersion),
-						selected_adapter->device_properties.properties.deviceName);
+	            VK_VERSION_MAJOR(selected_adapter->device_properties.properties.apiVersion),
+	            VK_VERSION_MINOR(selected_adapter->device_properties.properties.apiVersion),
+	            VK_VERSION_PATCH(selected_adapter->device_properties.properties.apiVersion),
+	            selected_adapter->device_properties.properties.deviceName);
 }
 
 static void zi_vulkan_terminate() {
 	zi_mem_free(adapters);
 
+	vkDestroyDescriptorPool(device, descriptor_pool, ZI_NULL);
+
+	vmaDestroyAllocator(vma_allocator);
+	vkDestroyDevice(device, ZI_NULL);
+
 	if (validation_layers_enabled) {
 		vkDestroyDebugUtilsMessengerEXT(instance, debug_utils_messenger_ext, ZI_NULL);
 	}
 
-	vkDestroyInstance(instance, NULL);
+	vkDestroyInstance(instance, ZI_NULL);
+
 	zi_log_debug("vulkan terminated successfully");
 }
 
